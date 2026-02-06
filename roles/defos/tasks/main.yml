@@ -1,2 +1,14 @@
 ---
 # tasks file for roles/defos
+
+# - name: Ensure '{{ event_source_name }}' event source exists
+#   ansible.builtin.include_role:
+#     name: ansible.windows.win_eventlog
+  # (not actually how include_role is used for modules) --- skip; use the module directly:
+
+- name: Ensure 'FoG Event Logging' event source exists
+  ansible.windows.win_eventlog:
+    name: "{{ event_log_name }}"
+    sources:
+      - "{{ event_source_name }}"
+    state: present

@@ -8,19 +8,19 @@ W25C-TEST02 ansible_host=10.100.30.52
 
 [windows:vars]
 
-psrp - Further reading:
+# psrp - Further reading:
 # https://docs.ansible.com/projects/ansible/latest/os_guide/windows_winrm.html#winrm-authentication
 ansible_connection=psrp
-ansible_psrp_auth=negotiate # or ntlm to only use NTLM
-cert_validation=ignore
-protocol=https
-remote_user=ansible-local
-remote_password=Start123!
+ansible_psrp_auth=ntlm
+ansible_psrp_cert_validation=ignore
+ansible_psrp_protocol=https
+ansible_psrp_user=ansible-local
+ansible_password=Start123!
 
 # winrm
-; ansible_user=ansible-local
-; ansible_password=Start123!
-; ansible_port=5986
-; ansible_connection=winrm
-; ansible_winrm_transport=ntlm
-; ansible_winrm_server_cert_validation=ignore
+# ansible_user=ansible-local
+# ansible_password=Start123!
+# ansible_port=5986
+# ansible_connection=winrm
+# ansible_winrm_transport=ntlm
+# ansible_winrm_server_cert_validation=ignore
