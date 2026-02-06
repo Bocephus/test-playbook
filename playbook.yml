@@ -1,0 +1,6 @@
+---
+- name: Example Playbook
+  hosts: windows
+  gather_facts: no
+  roles:
+    - defos

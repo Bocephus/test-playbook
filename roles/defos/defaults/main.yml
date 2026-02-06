@@ -1,2 +1,15 @@
 ---
 # defaults file for roles/defos
+
+- name: Ensure 'FoG Event Logging' event source exists
+  hosts: windows
+  gather_facts: no
+  collections:
+    - ansible.windows
+  tasks:
+    - name: Create Application log entry source 'FoG Event Logging'
+      ansible.windows.win_eventlog:
+        name: Application
+        sources:
+          - "FoG Event Logging"
+        state: present
