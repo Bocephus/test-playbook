@@ -1,14 +1,83 @@
 ---
 # tasks file for roles/defos
 
-# - name: Ensure '{{ event_source_name }}' event source exists
-#   ansible.builtin.include_role:
-#     name: ansible.windows.win_eventlog
-  # (not actually how include_role is used for modules) --- skip; use the module directly:
-
 - name: Ensure 'FoG Event Logging' event source exists
   ansible.windows.win_eventlog:
     name: "{{ event_log_name }}"
     sources:
       - "{{ event_source_name }}"
     state: present
+
+- name: Configure Event Logs
+  ansible.windows.win_eventlog:
+    name: "{{ item }}"
+    maximum_size: "{{ event_log_max_size_kb }}"
+    overflow_action: OverwriteAsNeeded
+    state: present
+  loop: "{{ event_log_name_all }}"
+
+# 1) Use win_firewall to enable profile and set inbound/outbound defaults
+- name: Configure firewall enabled state and default actions per profile
+  ansible.windows.win_firewall:
+    profiles: "{{ [ item.profile ] }}"   # must be a list
+    state: enabled
+    inbound_action: "{{ defos_default_inbound_action }}"
+    outbound_action: "{{ defos_default_outbound_action }}"
+  loop: "{{ defos_firewall_profiles }}"
+  loop_control:
+    label: "{{ item.profile }}"
+
+# 2) Use PowerShell to configure logging for each profile (Set-NetFirewallProfile)
+- name: Configure firewall logging per profile via Set-NetFirewallProfile
+  ansible.windows.win_powershell:
+    script: |
+      $profile = "{{ item.profile }}"
+      $logFile = "{{ item.log_file }}"
+      $logAllowed = {{ defos_log_allowed | lower }}
+      $logBlocked = {{ defos_log_blocked | lower }}
+      $logIgnored = {{ defos_log_ignored | lower }}
+      $logMaxKB = {{ defos_log_max_size_kb }}
+
+      $current = Get-NetFirewallProfile -Name $profile
+
+      $needChange = $false
+
+      if ($current.LogFileName -ne $logFile) {
+        Write-Verbose "LogFileName needs change: $($current.LogFileName) -> $logFile"
+        $needChange = $true
+      }
+      if ($current.LogAllowed -ne $logAllowed) {
+        Write-Verbose "LogAllowed needs change: $($current.LogAllowed) -> $logAllowed"
+        $needChange = $true
+      }
+      if ($current.LogBlocked -ne $logBlocked) {
+        Write-Verbose "LogBlocked needs change: $($current.LogBlocked) -> $logBlocked"
+        $needChange = $true
+      }
+      if ($current.LogIgnored -ne $logIgnored) {
+        Write-Verbose "LogIgnored needs change: $($current.LogIgnored) -> $logIgnored"
+        $needChange = $true
+      }
+      if ($current.LogMaxSizeKilobytes -ne $logMaxKB) {
+        Write-Verbose "LogMaxSizeKilobytes needs change: $($current.LogMaxSizeKilobytes) -> $logMaxKB"
+        $needChange = $true
+      }
+
+      if ($needChange) {
+        Set-NetFirewallProfile -Name $profile `
+          -LogFileName $logFile `
+          -LogAllowed $logAllowed `
+          -LogBlocked $logBlocked `
+          -LogMaxSizeKilobytes $logMaxKB `
+          -LogIgnored $logIgnored
+        Write-Output "Changed logging for $profile"
+      } else {
+        Write-Output "No change for $profile"
+      }
+  loop: "{{ defos_firewall_profiles }}"
+  loop_control:
+    label: "{{ item.profile }}"
+  args:
+    # run elevated if needed; remove if your connection already runs with admin privileges
+    # remove/comment the next line if you're not using become
+    # become: yes
