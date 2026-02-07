@@ -1,5 +1,31 @@
 ---
 # defaults file for roles/defos
 
+# Event Log settings
 event_log_name: 'Application'
 event_source_name: 'FoG Event Logging'
+event_log_name_all:
+  - 'Application'
+  - 'System'
+  - 'Security'
+event_log_max_size_kb: 51200kb    # does not accept an integer, must be a string with 'kb' suffix
+
+# Global firewall defaults
+defos_default_inbound_action: block
+defos_default_outbound_action: allow
+
+defos_log_allowed: false
+defos_log_ignored: false
+defos_log_blocked: true
+defos_log_max_size_kb: 16384
+
+# Per-profile configuration
+defos_firewall_profiles:
+  - profile: Domain
+    log_file: "%SystemRoot%\\system32\\LogFiles\\Firewall\\domain_pfirewall.log"
+
+  - profile: Private
+    log_file: "%SystemRoot%\\system32\\LogFiles\\Firewall\\private_pfirewall.log"
+
+  - profile: Public
+    log_file: "%SystemRoot%\\system32\\LogFiles\\Firewall\\public_pfirewall.log"
