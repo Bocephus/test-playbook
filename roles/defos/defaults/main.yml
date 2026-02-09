@@ -29,3 +29,6 @@ defos_firewall_profiles:
 
   - profile: Public
     log_file: "%SystemRoot%\\system32\\LogFiles\\Firewall\\public_pfirewall.log"
+
+# Control whether Windows Time uses SSL time data (0 = disable, 1 = enable)
+defos_utilize_ssl_time_data: 0

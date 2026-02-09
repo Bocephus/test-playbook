@@ -81,3 +81,11 @@
     # run elevated if needed; remove if your connection already runs with admin privileges
     # remove/comment the next line if you're not using become
     # become: yes
+
+- name: Ensure UtilizeSslTimeData is set (disable SSL time data)
+  ansible.windows.win_regedit:
+    path: 'HKLM:\SYSTEM\CurrentControlSet\Services\w32time\Config'
+    name: 'UtilizeSslTimeData'
+    data: "{{ defos_utilize_ssl_time_data }}"
+    type: dword
+    state: present
