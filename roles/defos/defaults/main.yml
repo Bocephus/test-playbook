@@ -32,3 +32,19 @@ defos_firewall_profiles:
 
 # Control whether Windows Time uses SSL time data (0 = disable, 1 = enable)
 defos_utilize_ssl_time_data: 0
+
+# RDP defaults
+defos_rdp_enable: true               # overall on/off switch
+defos_rdp_nla: true                  # Network Level Authentication (UserAuthentication)
+defos_rdp_service_name: TermService  # service to control
+# firewall rule group name to enable (Windows built-in rules)
+defos_rdp_firewall_group: "Remote Desktop"
+
+# New defaults for renaming local built-in accounts
+# New name for the built-in Administrator account
+defos_admin_new_name: "WinAdmin"
+
+# Either set a literal new name for Guest, or use guest suffix below.
+# If defos_guest_new_name is empty, the role will compute "<COMPUTERNAME>{{ defos_guest_new_suffix }}"
+defos_guest_new_name: ""          # e.g. "MyGuestAccount"  (leave empty to use computed name)
+defos_guest_new_suffix: "-Guest"  # default suffix used when defos_guest_new_name is empty

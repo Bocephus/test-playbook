@@ -1,6 +1,7 @@
 ---
 # tasks file for roles/defos
 
+# Create FoG Event Log Source and set max log size for Application/System/Security logs
 - name: Ensure 'FoG Event Logging' event source exists
   ansible.windows.win_eventlog:
     name: "{{ event_log_name }}"
@@ -16,7 +17,7 @@
     state: present
   loop: "{{ event_log_name_all }}"
 
-# 1) Use win_firewall to enable profile and set inbound/outbound defaults
+# Use win_firewall to enable profiles and set inbound/outbound defaults
 - name: Configure firewall enabled state and default actions per profile
   ansible.windows.win_firewall:
     profiles: "{{ [ item.profile ] }}"   # must be a list
@@ -27,61 +28,61 @@
   loop_control:
     label: "{{ item.profile }}"
 
-# 2) Use PowerShell to configure logging for each profile (Set-NetFirewallProfile)
-- name: Configure firewall logging per profile via Set-NetFirewallProfile
+# Ensure TLS1.2 & PSGallery/ NuGet provider are usable (idempotent)
+- name: Ensure TLS1.2 & PSGallery/ NuGet provider are usable
   ansible.windows.win_powershell:
     script: |
-      $profile = "{{ item.profile }}"
-      $logFile = "{{ item.log_file }}"
-      $logAllowed = {{ defos_log_allowed | lower }}
-      $logBlocked = {{ defos_log_blocked | lower }}
-      $logIgnored = {{ defos_log_ignored | lower }}
-      $logMaxKB = {{ defos_log_max_size_kb }}
+      [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-      $current = Get-NetFirewallProfile -Name $profile
-
-      $needChange = $false
-
-      if ($current.LogFileName -ne $logFile) {
-        Write-Verbose "LogFileName needs change: $($current.LogFileName) -> $logFile"
-        $needChange = $true
-      }
-      if ($current.LogAllowed -ne $logAllowed) {
-        Write-Verbose "LogAllowed needs change: $($current.LogAllowed) -> $logAllowed"
-        $needChange = $true
-      }
-      if ($current.LogBlocked -ne $logBlocked) {
-        Write-Verbose "LogBlocked needs change: $($current.LogBlocked) -> $logBlocked"
-        $needChange = $true
-      }
-      if ($current.LogIgnored -ne $logIgnored) {
-        Write-Verbose "LogIgnored needs change: $($current.LogIgnored) -> $logIgnored"
-        $needChange = $true
-      }
-      if ($current.LogMaxSizeKilobytes -ne $logMaxKB) {
-        Write-Verbose "LogMaxSizeKilobytes needs change: $($current.LogMaxSizeKilobytes) -> $logMaxKB"
-        $needChange = $true
+      $repo = Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue
+      if (-not $repo) {
+        Register-PSRepository -Default
+        $repo = Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue
       }
 
-      if ($needChange) {
-        Set-NetFirewallProfile -Name $profile `
-          -LogFileName $logFile `
-          -LogAllowed $logAllowed `
-          -LogBlocked $logBlocked `
-          -LogMaxSizeKilobytes $logMaxKB `
-          -LogIgnored $logIgnored
-        Write-Output "Changed logging for $profile"
-      } else {
-        Write-Output "No change for $profile"
+      if ($repo -and $repo.InstallationPolicy -ne 'Trusted') {
+        try { Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -ErrorAction Stop } catch {}
       }
+
+      if (-not (Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue)) {
+        Install-PackageProvider -Name NuGet -Force -Confirm:$false
+      }
+
+      Write-Output "PSGallery/PackageProvider ready"
+  register: _defos_psgallery_check
+  changed_when: false
+  failed_when: _defos_psgallery_check.rc is defined and _defos_psgallery_check.rc != 0
+
+# Install NetworkingDsc via community.windows.win_psmodule (idempotent)
+- name: Install NetworkingDsc PowerShell module (community.windows.win_psmodule)
+  community.windows.win_psmodule:
+    name: NetworkingDsc
+    state: present
+    scope: AllUsers
+    repository: PSGallery
+    # allow_clobber: yes
+  register: _defos_install_networkingdsc
+
+# Configure FirewallProfile logging for Domain/Private/Public via NetworkingDsc (win_dsc)
+- name: Configure FirewallProfile logging for Domain/Private/Public via NetworkingDsc (win_dsc)
+  ansible.windows.win_dsc:
+    resource_name: FirewallProfile
+    # pass DSC properties as top-level keys (compatible with older/newer win_dsc)
+    Name: "{{ item.profile }}"
+    Enabled: true
+    DefaultInboundAction: "{{ defos_default_inbound_action | default('Block') | title }}"
+    DefaultOutboundAction: "{{ defos_default_outbound_action | default('Allow') | title }}"
+    LogFileName: "{{ item.log_file }}"
+    LogAllowed: "{{ defos_log_allowed | default(false) }}"
+    LogIgnored: "{{ defos_log_ignored | default(false) }}"
+    LogBlocked: "{{ defos_log_blocked | default(true) }}"
+    LogMaxSizeKilobytes: "{{ defos_log_max_size_kb | default(16384) }}"
   loop: "{{ defos_firewall_profiles }}"
   loop_control:
     label: "{{ item.profile }}"
-  args:
-    # run elevated if needed; remove if your connection already runs with admin privileges
-    # remove/comment the next line if you're not using become
-    # become: yes
+  register: _defos_dsc_firewall
 
+# Disable SSL Time
 - name: Ensure UtilizeSslTimeData is set (disable SSL time data)
   ansible.windows.win_regedit:
     path: 'HKLM:\SYSTEM\CurrentControlSet\Services\w32time\Config'
@@ -89,3 +90,88 @@
     data: "{{ defos_utilize_ssl_time_data }}"
     type: dword
     state: present
+
+# Enable Remote Desktop (idempotent)
+- name: Ensure RDP is enabled (fDenyTSConnections = 0)
+  ansible.windows.win_regedit:
+    path: 'HKLM:\System\CurrentControlSet\Control\Terminal Server'
+    name: 'fDenyTSConnections'
+    data: 0
+    type: dword
+    state: present
+  when: defos_rdp_enable | default(true)
+
+- name: Ensure Network Level Authentication (UserAuthentication) is set when requested
+  ansible.windows.win_regedit:
+    path: 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp'
+    name: 'UserAuthentication'
+    data: "{{ 1 if (defos_rdp_nla | default(true)) else 0 }}"
+    type: dword
+    state: present
+  when: defos_rdp_enable | default(true)
+
+- name: Ensure Remote Desktop Services (TermService) is enabled and running
+  ansible.windows.win_service:
+    name: "{{ defos_rdp_service_name }}"
+    start_mode: auto
+    state: started
+  when: defos_rdp_enable | default(true)
+
+- name: Enable built-in Remote Desktop firewall rules (all profiles)
+  community.windows.win_firewall_rule:
+    name: "{{ item }}"
+    enabled: yes
+    state: present
+  loop:
+    - "{{ defos_rdp_firewall_group }}"
+    # Some Windows versions expose two rule names; ensure both common forms are tried:
+    - "Remote Desktop - User Mode (TCP-In)"
+    - "Remote Desktop - User Mode (UDP-In)"
+  when: defos_rdp_enable | default(true)
+
+# Get current name of the built-in Administrator (SID RID 500)
+- name: Get current name of built-in Administrator account (by SID)
+  ansible.windows.win_powershell:
+    script: |
+      $u = Get-LocalUser -ErrorAction SilentlyContinue | Where-Object { $_.SID.Value -like '*-500' }
+      if ($null -ne $u) { $u.Name.Trim() } else { Write-Output "" }
+  register: _defos_admin_user
+  changed_when: false
+
+- name: Rename built-in Administrator to "{{ defos_admin_new_name }}" if still named Administrator
+  ansible.windows.win_powershell:
+    script: |
+      Rename-LocalUser -Name "Administrator" -NewName "{{ defos_admin_new_name }}"
+  when: (_defos_admin_user.stdout | default('') | trim) == 'Administrator'
+  register: _defos_rename_admin
+  changed_when: _defos_rename_admin.rc == 0
+  failed_when: _defos_rename_admin.rc is defined and _defos_rename_admin.rc != 0
+
+# Get current name of the built-in Guest (by SID)
+- name: Get current name of built-in Guest account (by SID)
+  ansible.windows.win_powershell:
+    script: |
+      $u = Get-LocalUser -ErrorAction SilentlyContinue | Where-Object { $_.SID.Value -like '*-501' }
+      if ($null -ne $u) { $u.Name.Trim() } else { Write-Output "" }
+  register: _defos_guest_user
+  changed_when: false
+
+- name: Rename built-in Guest to computed name (or defos_guest_new_name) if still named Guest
+  ansible.windows.win_powershell:
+    script: |
+      $desired = "{{ defos_guest_new_name }}"
+      if ([string]::IsNullOrWhiteSpace($desired)) {
+        $desired = "$env:COMPUTERNAME{{ defos_guest_new_suffix }}"
+      }
+      Rename-LocalUser -Name "Guest" -NewName $desired
+  when: (_defos_guest_user.stdout | default('') | trim) == 'Guest'
+  register: _defos_rename_guest
+  changed_when: _defos_rename_guest.rc == 0
+  failed_when: _defos_rename_guest.rc is defined and _defos_rename_guest.rc != 0
+
+- name: Debug current admin/guest name
+  debug:
+    msg:
+      - "Admin raw stdout: {{ _defos_admin_user.stdout | repr }}"
+      - "Guest raw stdout: {{ _defos_guest_user.stdout | repr }}"
+  when: debug is defined and debug | bool
