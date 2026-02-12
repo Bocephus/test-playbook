@@ -129,49 +129,64 @@
     - "Remote Desktop - User Mode (UDP-In)"
   when: defos_rdp_enable | default(true)
 
-# Get current name of the built-in Administrator (SID RID 500)
-- name: Get current name of built-in Administrator account (by SID)
+# Rename built-in Administrator (SID RID 500)
+- name: Rename built-in Administrator account (by SID)
   ansible.windows.win_powershell:
     script: |
-      $u = Get-LocalUser -ErrorAction SilentlyContinue | Where-Object { $_.SID.Value -like '*-500' }
-      if ($null -ne $u) { $u.Name.Trim() } else { Write-Output "" }
-  register: _defos_admin_user
-  changed_when: false
+      $u = Get-LocalUser -ErrorAction SilentlyContinue |
+        Where-Object { $_.SID.Value -like '*-500' }
 
-- name: Rename built-in Administrator to "{{ defos_admin_new_name }}" if still named Administrator
-  ansible.windows.win_powershell:
-    script: |
-      Rename-LocalUser -Name "Administrator" -NewName "{{ defos_admin_new_name }}"
-  when: (_defos_admin_user.stdout | default('') | trim) == 'Administrator'
-  register: _defos_rename_admin
-  changed_when: _defos_rename_admin.rc == 0
-  failed_when: _defos_rename_admin.rc is defined and _defos_rename_admin.rc != 0
+      if ($null -eq $u) {
+        return @{ renamed = $false; msg = "No -500 account found" }
+      }
 
-# Get current name of the built-in Guest (by SID)
-- name: Get current name of built-in Guest account (by SID)
-  ansible.windows.win_powershell:
-    script: |
-      $u = Get-LocalUser -ErrorAction SilentlyContinue | Where-Object { $_.SID.Value -like '*-501' }
-      if ($null -ne $u) { $u.Name.Trim() } else { Write-Output "" }
-  register: _defos_guest_user
-  changed_when: false
+      if ($u.Name -ne "{{ defos_admin_new_name }}") {
+        Rename-LocalUser -InputObject $u -NewName "{{ defos_admin_new_name }}"
+        return @{ renamed = $true; msg = "Renamed to {{ defos_admin_new_name }}" }
+      } else {
+        return @{ renamed = $false; msg = "Name already changed" }
+      }
+  register: admin_rename
+  changed_when: admin_rename.output[0].renamed
 
-- name: Rename built-in Guest to computed name (or defos_guest_new_name) if still named Guest
+# Rename built-in Guest (by SID)
+- name: Rename built-in Guest account (by SID)
   ansible.windows.win_powershell:
     script: |
+      $u = Get-LocalUser -ErrorAction SilentlyContinue |
+        Where-Object { $_.SID.Value -like '*-501' }
+
+      if ($null -eq $u) {
+        return @{ renamed = $false; msg = "No -501 account found"; new_name = $null }
+      }
+
       $desired = "{{ defos_guest_new_name }}"
       if ([string]::IsNullOrWhiteSpace($desired)) {
         $desired = "$env:COMPUTERNAME{{ defos_guest_new_suffix }}"
       }
-      Rename-LocalUser -Name "Guest" -NewName $desired
-  when: (_defos_guest_user.stdout | default('') | trim) == 'Guest'
-  register: _defos_rename_guest
-  changed_when: _defos_rename_guest.rc == 0
-  failed_when: _defos_rename_guest.rc is defined and _defos_rename_guest.rc != 0
 
-- name: Debug current admin/guest name
-  debug:
-    msg:
-      - "Admin raw stdout: {{ _defos_admin_user.stdout | repr }}"
-      - "Guest raw stdout: {{ _defos_guest_user.stdout | repr }}"
-  when: debug is defined and debug | bool
+      if ($u.Name -ne $desired) {
+        Rename-LocalUser -InputObject $u -NewName $desired
+        return @{ renamed = $true; msg = "Renamed to $desired"; new_name = $desired }
+      } else {
+        return @{ renamed = $false; msg = "Name already '$desired'"; new_name = $desired }
+      }
+  register: guest_rename
+  changed_when: guest_rename.output[0].renamed
+
+- name: Show rename result
+  ansible.builtin.debug:
+    msg: "{{ guest_rename.output[0].msg }} (new name: {{ guest_rename.output[0].new_name }})"
+
+- name: Save guest account name for later plays
+  ansible.builtin.set_fact:
+    guest_account_name: "{{ guest_rename.output[0].new_name }}"
+
+- name: Disable the renamed guest account
+  ansible.windows.win_user:
+    name: "{{ guest_account_name }}"
+    account_disabled: true
+
+- name: Set timezone to 'Eastern Standard Time' (GMT-05:00)
+  ansible.windows.win_timezone:
+    timezone: Eastern Standard Time
