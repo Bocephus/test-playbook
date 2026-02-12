@@ -1,0 +1,27 @@
+---
+driver:
+  name: default
+
+platforms:
+  - name: windows-instance
+
+provisioner:
+  name: ansible
+  config_options:
+    defaults:
+      roles_path:
+        - ../..
+  inventory:
+    hosts:
+      windows-instance:
+        ansible_host: 10.100.30.79     # <-- REPLACE with your Windows host IP/hostname
+        ansible_user: ansible-local    # <-- REPLACE with username
+        ansible_password: Start123!    # <-- REPLACE with password
+        ansible_connection: psrp
+        ansible_psrp_auth: ntlm
+        ansible_psrp_protocol: https
+        ansible_psrp_cert_validation: ignore
+        ansible_port: 5986
+
+verifier:
+  name: ansible

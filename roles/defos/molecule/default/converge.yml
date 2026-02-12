@@ -1,0 +1,12 @@
+---
+- name: Converge
+  hosts: windows-instance
+  gather_facts: no
+  collections:
+    - ansible.windows
+    - community.windows
+
+  tasks:
+    - name: Import defos role from local path
+      import_role:
+        name: ../..
