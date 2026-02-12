@@ -1,0 +1,49 @@
+---
+# Rename Administrator
+
+- name: Rename built-in Administrator (SID 500)
+  ansible.windows.win_powershell:
+    script: |
+      $u = Get-LocalUser | Where-Object { $_.SID.Value -like '*-500' }
+      if ($u -and $u.Name -ne "{{ defos_admin_new_name }}") {
+        Rename-LocalUser -InputObject $u -NewName "{{ defos_admin_new_name }}"
+        return @{ renamed = $true }
+      } else {
+        return @{ renamed = $false }
+      }
+  register: admin_rename
+  changed_when: admin_rename.output[0].renamed
+
+# Rename Guest
+
+- name: Rename built-in Guest (SID 501)
+  ansible.windows.win_powershell:
+    script: |
+      $u = Get-LocalUser | Where-Object { $_.SID.Value -like '*-501' }
+      if ($null -eq $u) {
+        return @{ renamed = $false; new_name = $null }
+      }
+
+      $desired = "{{ defos_guest_new_name }}"
+      if ([string]::IsNullOrWhiteSpace($desired)) {
+        $desired = "$env:COMPUTERNAME{{ defos_guest_new_suffix }}"
+      }
+
+      if ($u.Name -ne $desired) {
+        Rename-LocalUser -InputObject $u -NewName $desired
+        return @{ renamed = $true; new_name = $desired }
+      } else {
+        return @{ renamed = $false; new_name = $desired }
+      }
+  register: guest_rename
+  changed_when: guest_rename.output[0].renamed
+
+- name: Save guest account name
+  set_fact:
+    guest_account_name: "{{ guest_rename.output[0].new_name }}"
+
+- name: Disable guest account
+  ansible.windows.win_user:
+    name: "{{ guest_account_name }}"
+    account_disabled: true
+  when: guest_account_name is defined

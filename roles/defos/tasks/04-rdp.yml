@@ -1,0 +1,38 @@
+---
+# Enable Remote Desktop
+
+- name: Enable RDP
+  ansible.windows.win_regedit:
+    path: 'HKLM:\System\CurrentControlSet\Control\Terminal Server'
+    name: 'fDenyTSConnections'
+    data: 0
+    type: dword
+    state: present
+  when: defos_rdp_enable | default(true)
+
+- name: Configure NLA
+  ansible.windows.win_regedit:
+    path: 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp'
+    name: 'UserAuthentication'
+    data: "{{ 1 if defos_rdp_nla | default(true) else 0 }}"
+    type: dword
+    state: present
+  when: defos_rdp_enable | default(true)
+
+- name: Ensure TermService running
+  ansible.windows.win_service:
+    name: "{{ defos_rdp_service_name }}"
+    start_mode: auto
+    state: started
+  when: defos_rdp_enable | default(true)
+
+- name: Enable RDP firewall rules
+  community.windows.win_firewall_rule:
+    name: "{{ item }}"
+    enabled: yes
+    state: present
+  loop:
+    - "{{ defos_rdp_firewall_group }}"
+    - "Remote Desktop - User Mode (TCP-In)"
+    - "Remote Desktop - User Mode (UDP-In)"
+  when: defos_rdp_enable | default(true)

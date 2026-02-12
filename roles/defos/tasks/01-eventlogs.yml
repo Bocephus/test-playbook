@@ -1,0 +1,17 @@
+---
+# Create FoG Event Log Source and configure log sizes
+
+- name: Ensure 'FoG Event Logging' event source exists
+  ansible.windows.win_eventlog:
+    name: "{{ event_log_name }}"
+    sources:
+      - "{{ event_source_name }}"
+    state: present
+
+- name: Configure Event Logs
+  ansible.windows.win_eventlog:
+    name: "{{ item }}"
+    maximum_size: "{{ event_log_max_size_kb }}"
+    overflow_action: OverwriteAsNeeded
+    state: present
+  loop: "{{ event_log_name_all }}"
