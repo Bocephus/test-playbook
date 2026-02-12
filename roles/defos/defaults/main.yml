@@ -3,7 +3,7 @@
 
 # Event Log settings
 event_log_name: 'Application'
-event_source_name: 'FoG Event Logging'
+event_source_name: 'SAL9000-Event'
 event_log_name_all:
   - 'Application'
   - 'System'

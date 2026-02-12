@@ -1,12 +1,17 @@
 ---
-# Create FoG Event Log Source and configure log sizes
-
-- name: Ensure 'FoG Event Logging' event source exists
+# Create SAL9000 Event Log Source and configure log sizes
+- name: Ensure 'SAL9000-Event' event source exists
   ansible.windows.win_eventlog:
     name: "{{ event_log_name }}"
     sources:
       - "{{ event_source_name }}"
     state: present
+  register: sal9000_eventlog_result
+
+# Optional debug (remove in CI) so you can see converge output
+# - name: Debug sal9000_eventlog_result
+#   debug:
+#     var: sal9000_eventlog_result
 
 - name: Configure Event Logs
   ansible.windows.win_eventlog:
