@@ -2,18 +2,17 @@
 - name: Verify
   hosts: windows-instance
   gather_facts: no
+
   vars:
-    # Ansible connection and authentication details for the target Windows host. These should match the connection details used in molecule.yml and the expected configuration of your role.
-    ansible_host: 10.100.30.79     # <-- REPLACE with your Windows host IP/hostname
-    ansible_user: ansible-local    # <-- REPLACE with username
-    ansible_password: Start123!    # <-- REPLACE with password
+    ansible_host: 10.100.30.79
+    ansible_user: ansible-local
+    ansible_password: Start123!
     ansible_connection: psrp
     ansible_psrp_auth: ntlm
     ansible_psrp_protocol: https
     ansible_psrp_cert_validation: ignore
     ansible_port: 5986
 
-    # values should match your role defaults (or the values you pass when converging)
     event_log_name: "Application"
     event_source_name: "SAL9000-Event"
     event_log_name_all:
@@ -22,7 +21,6 @@
       - "Security"
     event_log_max_size_kb: 51200
 
-    # firewall & logging expectations
     defos_default_inbound_action: "block"
     defos_default_outbound_action: "allow"
     defos_log_allowed: false
@@ -37,136 +35,145 @@
       - profile: Public
         log_file: "%SystemRoot%\\system32\\LogFiles\\Firewall\\public_pfirewall.log"
 
-    # timesync / rdp / account rename expectations
     defos_utilize_ssl_time_data: 0
     defos_rdp_nla: true
     defos_admin_new_name: "WinAdmin"
     defos_guest_new_name: ""
     defos_guest_new_suffix: "-Guest"
+
   collections:
     - ansible.windows
     - community.windows
 
   tasks:
-    - name: Gather basic facts (for debug)
+
+    - name: Gather basic facts
       ansible.windows.setup:
-      register: _setup
+      changed_when: false
 
     ####################################################################
-    # 1) Check event log source exists (Application)
+    # 1) Check event log source exists
     ####################################################################
     - name: Check event source exists (modern API)
       ansible.windows.win_powershell:
         script: |
           try {
             $provider = Get-WinEvent -ListProvider "{{ event_source_name }}" -ErrorAction Stop
-            return @{ SourceExists = $true }
+            return @{ Exists = $true }
           } catch {
-            return @{ SourceExists = $false }
+            return @{ Exists = $false }
           }
       register: source_info
+      changed_when: false
 
     - name: Assert event source exists
-      ansible.builtin.assert:
+      assert:
         that:
-          - source_info.output[0].SourceExists
+          - source_info.output[0].Exists
         fail_msg: "Event source '{{ event_source_name }}' not found"
-
-    # - name: Check FoG Event Logging source exists
-    #   ansible.windows.win_powershell:
-    #     script: |
-    #       if ([System.Diagnostics.EventLog]::SourceExists('{{ event_source_name }}')) { Write-Output "present" } else { Write-Output "absent" }
-    #   register: check_event_source
-    # - name: Assert event source present orig
-    #   assert:
-    #     that:
-    #       - check_event_source.stdout | default('') | trim == 'present'
-    #     fail_msg: "FoG Event Logging source not found"
 
     ####################################################################
     # 2) Check UtilizeSslTimeData registry value
     ####################################################################
-    - name: Read UtilizeSslTimeData via PowerShell
+    - name: Read UtilizeSslTimeData
       ansible.windows.win_powershell:
         script: |
           try {
             $v = (Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\w32time\Config' -Name 'UtilizeSslTimeData' -ErrorAction SilentlyContinue).UtilizeSslTimeData
-            if ($null -eq $v) { Write-Output "missing" } else { Write-Output $v }
+            return @{ Value = $v }
           } catch {
-            Write-Output "error:$($_.Exception.Message)"
+            return @{ Value = "error:$($_.Exception.Message)" }
           }
       register: check_ssl_time
+      changed_when: false
 
     - name: Assert SSL time data equals expected value
       assert:
         that:
-          - (check_ssl_time.stdout | default('') | trim) == (defos_utilize_ssl_time_data | string)
-        fail_msg: "UtilizeSslTimeData not set to {{ defos_utilize_ssl_time_data }} (found: {{ check_ssl_time.stdout }})"
+          - check_ssl_time.output[0].Value | string == defos_utilize_ssl_time_data | string
+        fail_msg: "UtilizeSslTimeData not set to {{ defos_utilize_ssl_time_data }} (found: {{ check_ssl_time.output[0].Value }})"
 
     ####################################################################
-    # 3) Check RDP enabled (fDenyTSConnections = 0) and NLA setting
+    # 3) Check RDP enabled + NLA
     ####################################################################
     - name: Read fDenyTSConnections
       ansible.windows.win_powershell:
         script: |
-          $v = (Get-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name 'fDenyTSConnections' -ErrorAction SilentlyContinue).fDenyTSConnections
-          if ($null -eq $v) { Write-Output "missing" } else { Write-Output $v }
+          try {
+            $v = (Get-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name 'fDenyTSConnections' -ErrorAction SilentlyContinue).fDenyTSConnections
+            return @{ Value = $v }
+          } catch {
+            return @{ Value = "error:$($_.Exception.Message)" }
+          }
       register: check_rdp_flag
+      changed_when: false
+
     - name: Assert RDP enabled (fDenyTSConnections = 0)
       assert:
         that:
-          - (check_rdp_flag.stdout | default('')) | trim == '0'
-        fail_msg: "RDP not enabled (fDenyTSConnections != 0)"
+          - check_rdp_flag.output[0].Value | string == '0'
+        fail_msg: "RDP not enabled (found: {{ check_rdp_flag.output[0].Value }})"
 
     - name: Read UserAuthentication (NLA)
       ansible.windows.win_powershell:
         script: |
-          $v = (Get-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name 'UserAuthentication' -ErrorAction SilentlyContinue).UserAuthentication
-          if ($null -eq $v) { Write-Output "missing" } else { Write-Output $v }
+          try {
+            $v = (Get-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name 'UserAuthentication' -ErrorAction SilentlyContinue).UserAuthentication
+            return @{ Value = $v }
+          } catch {
+            return @{ Value = "error:$($_.Exception.Message)" }
+          }
       register: check_nla
+      changed_when: false
+
     - name: Assert NLA equals expected
       assert:
         that:
-          - (check_nla.stdout | default('')) | trim == ( (1 if defos_rdp_nla | default(true) else 0) | string )
-        fail_msg: "UserAuthentication doesn't match expected NLA setting"
+          - check_nla.output[0].Value | string == ((defos_rdp_nla | default(true)) | ternary('1','0'))
+        fail_msg: "UserAuthentication incorrect (found: {{ check_nla.output[0].Value }})"
 
     ####################################################################
-    # 4) Check that Administrator account was renamed
+    # 4) Check Administrator rename
     ####################################################################
-    - name: Determine current Administrator account name (SID *-500)
+    - name: Determine Administrator account name
       ansible.windows.win_powershell:
         script: |
           $u = Get-LocalUser | Where-Object { $_.SID.Value -like '*-500' }
-          if ($null -eq $u) { Write-Output "" } else { Write-Output $u.Name }
+          return @{ Value = $u.Name }
       register: current_admin_name
+      changed_when: false
 
-    - name: Assert Administrator renamed to expected name
+    - name: Assert Administrator renamed
       assert:
         that:
-          - (current_admin_name.stdout | default('') | trim) == defos_admin_new_name
-        fail_msg: "Administrator account not renamed to {{ defos_admin_new_name }} (found: {{ current_admin_name.stdout }})"
+          - current_admin_name.output[0].Value == defos_admin_new_name
+        fail_msg: "Administrator not renamed (found: {{ current_admin_name.output[0].Value }})"
 
     ####################################################################
-    # 5) Check Guest account renamed and disabled
+    # 5) Check Guest rename + disabled
     ####################################################################
-    - name: Determine current Guest account (SID *-501)
+    - name: Determine Guest account info
       ansible.windows.win_powershell:
         script: |
           $u = Get-LocalUser | Where-Object { $_.SID.Value -like '*-501' }
-          if ($null -eq $u) { Write-Output "" } else { Write-Output ($u.Name + '|' + ($u.Enabled -as [string])) }
+          if ($null -eq $u) {
+            return @{ Name = ""; Enabled = "" }
+          }
+          return @{ Name = $u.Name; Enabled = $u.Enabled }
       register: guest_info
+      changed_when: false
 
-    - name: Assert Guest renamed and disabled (if configured)
+    - name: Assert Guest renamed and disabled
       assert:
         that:
-          - (guest_info.stdout | default('') | split('\\|')[0] | trim) == ( "{{ (defos_guest_new_name if defos_guest_new_name != '' else (ansible_env.COMPUTERNAME + defos_guest_new_suffix)) }}" )
-          - (guest_info.stdout | default('') | split('\\|')[1] | trim) == 'False'
-        fail_msg: "Guest account name or enabled state not as expected: {{ guest_info.stdout }}"
+          - guest_info.output[0].Name == (defos_guest_new_name if defos_guest_new_name != "" else ansible_env.COMPUTERNAME + defos_guest_new_suffix)
+          - guest_info.output[0].Enabled | string == 'False'
+        fail_msg: "Guest account incorrect: {{ guest_info.output[0] }}"
 
     ####################################################################
-    # 6) Check firewall profiles enabled and logging file set
+    # 6) Firewall profile checks
     ####################################################################
-    - name: Verify firewall profile settings via PowerShell
+    - name: Verify firewall profiles
       ansible.windows.win_powershell:
         script: |
           $profiles = @('Domain','Private','Public')
@@ -174,29 +181,35 @@
           foreach ($p in $profiles) {
             $pf = Get-NetFirewallProfile -Name $p
             if ($pf.Enabled -ne $true) { $errs += "$p:disabled" }
-            # check LogFileName
             if ($pf.LogFileName -notlike '*pfirewall.log') { $errs += "$p:logpath:$($pf.LogFileName)" }
           }
-          if ($errs.Count -eq 0) { Write-Output "ok" } else { Write-Output ($errs -join ';') }
+          return @{ Value = ($errs -join ';') }
       register: check_fw_profiles
+      changed_when: false
 
-    - name: Assert firewall profiles pass checks
+    - name: Assert firewall profiles OK
       assert:
         that:
-          - (check_fw_profiles.stdout | default('')) | trim == 'ok'
-        fail_msg: "Firewall profile checks failed: {{ check_fw_profiles.stdout }}"
+          - check_fw_profiles.output[0].Value == ""
+        fail_msg: "Firewall profile issues: {{ check_fw_profiles.output[0].Value }}"
 
     ####################################################################
-    # 7) Verify OpenSSH capability present (if applied)
+    # 7) OpenSSH capability
     ####################################################################
-    - name: Check OpenSSH.Server capability present
+    - name: Check OpenSSH capability
       ansible.windows.win_powershell:
         script: |
-          $cap = Get-WindowsCapability -Online -Name 'OpenSSH.Server~~~~0.0.1.0' -ErrorAction SilentlyContinue
-          if ($null -eq $cap) { Write-Output 'absent' } else { Write-Output $cap.State }
+          try {
+            $cap = Get-WindowsCapability -Online -Name 'OpenSSH.Server~~~~0.0.1.0' -ErrorAction Stop
+            return @{ String = $cap.State.ToString() }
+          } catch {
+            return @{ String = "absent" }
+          }
       register: ssh_cap
-    - name: Assert OpenSSH server installed or state Present
+      changed_when: false
+
+    - name: Assert OpenSSH installed
       assert:
         that:
-          - "(ssh_cap.stdout | default('') | trim) in ['Installed', 'Present', 'State: Installed', 'State: Present']"
-        fail_msg: "OpenSSH capability not present/installed: {{ ssh_cap.stdout }}"
+          - "ssh_cap.output[0].String in ['Installed','Present','State: Installed','State: Present']"
+        fail_msg: "OpenSSH capability not present/installed: {{ ssh_cap.output[0] }}"
