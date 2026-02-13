@@ -1,0 +1,72 @@
+---
+# 99-report-changes.yml
+# Centralized change summary for the defos role
+
+- name: Initialize defos_changes list
+  set_fact:
+    defos_changes: []
+
+# NetworkingDsc module install (community.windows.win_psmodule)
+- name: Record NetworkingDsc module install
+  set_fact:
+    defos_changes: "{{ defos_changes + ['Installed NetworkingDsc (module)'] }}"
+  when: _defos_install_networkingdsc is defined and (_defos_install_networkingdsc.changed | default(false))
+
+# Firewall DSC changes: check .results for any changed == true
+- name: Record FirewallProfile DSC changes (if any)
+  set_fact:
+    defos_changes: "{{ defos_changes + ['Applied FirewallProfile DSC changes'] }}"
+  when: >
+    _defos_dsc_firewall is defined and
+    (
+      (_defos_dsc_firewall.changed | default(false)) or
+      (
+        (_defos_dsc_firewall.results is defined) and
+        ((_defos_dsc_firewall.results | selectattr('changed','equalto',true) | list | length) > 0)
+      )
+    )
+
+# Admin rename: prefer .changed, fallback to output[0].renamed if present
+- name: Record Admin rename
+  set_fact:
+    defos_changes: >-
+      {{ defos_changes + [ (admin_rename.output[0].msg if (admin_rename.output is defined and admin_rename.output|length>0 and admin_rename.output[0].msg is defined) else 'Renamed Administrator') ] }}
+  when: admin_rename is defined and (admin_rename.changed | default(false) or (admin_rename.output is defined and admin_rename.output|length>0 and admin_rename.output[0].renamed))
+
+# Guest rename: record message and new name if available
+- name: Record Guest rename
+  set_fact:
+    defos_changes: >-
+      {{ defos_changes + [ (guest_rename.output[0].msg ~ ' (new name: ' ~ (guest_rename.output[0].new_name | default('unknown')) ~ ')') if (guest_rename.output is defined and guest_rename.output|length>0 and guest_rename.output[0].msg is defined) else defos_changes ] }}
+  when: guest_rename is defined and (guest_rename.changed | default(false) or (guest_rename.output is defined and guest_rename.output|length>0 and guest_rename.output[0].renamed))
+
+# Guest disable: record if disabled
+- name: Record Guest disable
+  set_fact:
+    defos_changes: "{{ defos_changes + [ (guest_disable_json.stdout | default('{}') | from_json).msg ] }}"
+  when: guest_disable_json is defined and ((guest_disable_json.stdout | default('{}') | from_json).disabled | default(false))
+
+# Example: Event log change (if you register fog_eventlog_result)
+- name: Record FoG event log creation/resizing (if task registered)
+  set_fact:
+    defos_changes: "{{ defos_changes + ['Configured FoG event log'] }}"
+  when: fog_eventlog_result is defined and (fog_eventlog_result.changed | default(false))
+
+# Example: ComputerManagementDsc install
+- name: Record ComputerManagementDsc install
+  set_fact:
+    defos_changes: "{{ defos_changes + ['Installed ComputerManagementDsc (module)'] }}"
+  when: _defos_install_computermanagementdsc is defined and (_defos_install_computermanagementdsc.changed | default(false))
+
+# Example: WindowsCapability DSC application
+- name: Record WindowsCapability DSC changes (OpenSSH)
+  set_fact:
+    defos_changes: "{{ defos_changes + ['Applied WindowsCapability DSC (OpenSSH)'] }}"
+  when: _defos_dsc_windowscapability is defined and (_defos_dsc_windowscapability.changed | default(false))
+
+# Final: show per-host summary
+- name: Show per-host defos change summary
+  debug:
+    msg:
+      - "Host: {{ inventory_hostname }}"
+      - "defos changes: {{ defos_changes | default(['no changes']) }}"

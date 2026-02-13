@@ -6,6 +6,11 @@ W25G-TEST02 ansible_host=10.100.30.84
 W25C-TEST01 ansible_host=10.100.30.58
 W25C-TEST02 ansible_host=10.100.30.52
 
+; W25C-TEST03 ansible_host=10.100.30.74
+; W25C-TEST04 ansible_host=10.100.30.75
+; W25G-TEST03 ansible_host=10.100.30.76
+; W25G-TEST04 ansible_host=10.100.30.77
+
 [windows:vars]
 
 # psrp - Further reading:
@@ -18,9 +23,9 @@ ansible_psrp_user=ansible-local
 ansible_password=Start123!
 
 # winrm
-# ansible_user=ansible-local
-# ansible_password=Start123!
-# ansible_port=5986
-# ansible_connection=winrm
-# ansible_winrm_transport=ntlm
-# ansible_winrm_server_cert_validation=ignore
+; ansible_user=ansible-local
+; ansible_password=Start123!
+; ansible_port=5986
+; ansible_connection=winrm
+; ansible_winrm_transport=ntlm
+; ansible_winrm_server_cert_validation=ignore

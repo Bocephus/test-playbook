@@ -1,0 +1,32 @@
+{% if ansible_distribution_version is version('10.0.26100.0', '>=') %}
+# Windows Server 2025 or newer
+PubkeyAuthentication yes
+PasswordAuthentication no
+PermitEmptyPasswords no
+GSSAPIAuthentication yes
+Subsystem powershell c:/progra~1/powershell/7/pwsh.exe -sshs -NoLogo -NoProfile
+AllowGroups administrators "openssh users"
+Match address 10.100.30.40
+  PasswordAuthentication yes
+
+
+{% elif ansible_distribution_version is version('10.0.17763', '>=') %}
+# Windows Server 2019 or newer
+PubkeyAuthentication yes
+PasswordAuthentication no
+PermitEmptyPasswords no
+Subsystem powershell c:/progra~1/powershell/7/pwsh.exe -sshs -NoLogo -NoProfile
+AllowGroups administrators "openssh users"
+Match address 10.100.30.40
+  PasswordAuthentication yes
+
+{% else %}
+# Older Windows Server
+PubkeyAuthentication yes
+PasswordAuthentication no
+PermitEmptyPasswords no
+Subsystem powershell c:/progra~1/powershell/7/pwsh.exe -sshs -NoLogo -NoProfile
+AllowGroups administrators "openssh users"
+Match address 10.100.30.40
+  PasswordAuthentication yes
+{% endif %}

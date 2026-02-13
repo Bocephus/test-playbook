@@ -1,83 +1,246 @@
 ---
-# tasks file for roles/defos
+# Orchestrator for defos role - must be a list of tasks (each import_tasks is a task)
+- import_tasks: 01-eventlogs.yml
+- import_tasks: 02-firewall.yml
+- import_tasks: 03-timesync.yml
+- import_tasks: 04-rdp.yml
+- import_tasks: 05-local-accounts.yml
+- import_tasks: 06-timezone.yml
+- import_tasks: 07-packages.yml
+- import_tasks: 08-ssh.yml
+- import_tasks: 99-report-changes.yml    # if you added the centralized report
 
-- name: Ensure 'FoG Event Logging' event source exists
-  ansible.windows.win_eventlog:
-    name: "{{ event_log_name }}"
-    sources:
-      - "{{ event_source_name }}"
-    state: present
 
-- name: Configure Event Logs
-  ansible.windows.win_eventlog:
-    name: "{{ item }}"
-    maximum_size: "{{ event_log_max_size_kb }}"
-    overflow_action: OverwriteAsNeeded
-    state: present
-  loop: "{{ event_log_name_all }}"
 
-# 1) Use win_firewall to enable profile and set inbound/outbound defaults
-- name: Configure firewall enabled state and default actions per profile
-  ansible.windows.win_firewall:
-    profiles: "{{ [ item.profile ] }}"   # must be a list
-    state: enabled
-    inbound_action: "{{ defos_default_inbound_action }}"
-    outbound_action: "{{ defos_default_outbound_action }}"
-  loop: "{{ defos_firewall_profiles }}"
-  loop_control:
-    label: "{{ item.profile }}"
+# ---
+# # tasks file for roles/defos
 
-# 2) Use PowerShell to configure logging for each profile (Set-NetFirewallProfile)
-- name: Configure firewall logging per profile via Set-NetFirewallProfile
-  ansible.windows.win_powershell:
-    script: |
-      $profile = "{{ item.profile }}"
-      $logFile = "{{ item.log_file }}"
-      $logAllowed = {{ defos_log_allowed | lower }}
-      $logBlocked = {{ defos_log_blocked | lower }}
-      $logIgnored = {{ defos_log_ignored | lower }}
-      $logMaxKB = {{ defos_log_max_size_kb }}
+# # Create FoG Event Log Source and set max log size for Application/System/Security logs
+# - name: Ensure 'FoG Event Logging' event source exists
+#   ansible.windows.win_eventlog:
+#     name: "{{ event_log_name }}"
+#     sources:
+#       - "{{ event_source_name }}"
+#     state: present
 
-      $current = Get-NetFirewallProfile -Name $profile
+# - name: Configure Event Logs
+#   ansible.windows.win_eventlog:
+#     name: "{{ item }}"
+#     maximum_size: "{{ event_log_max_size_kb }}"
+#     overflow_action: OverwriteAsNeeded
+#     state: present
+#   loop: "{{ event_log_name_all }}"
 
-      $needChange = $false
+# # Use win_firewall to enable profiles and set inbound/outbound defaults
+# - name: Configure firewall enabled state and default actions per profile
+#   ansible.windows.win_firewall:
+#     profiles: "{{ [ item.profile ] }}"   # must be a list
+#     state: enabled
+#     inbound_action: "{{ defos_default_inbound_action }}"
+#     outbound_action: "{{ defos_default_outbound_action }}"
+#   loop: "{{ defos_firewall_profiles }}"
+#   loop_control:
+#     label: "{{ item.profile }}"
 
-      if ($current.LogFileName -ne $logFile) {
-        Write-Verbose "LogFileName needs change: $($current.LogFileName) -> $logFile"
-        $needChange = $true
-      }
-      if ($current.LogAllowed -ne $logAllowed) {
-        Write-Verbose "LogAllowed needs change: $($current.LogAllowed) -> $logAllowed"
-        $needChange = $true
-      }
-      if ($current.LogBlocked -ne $logBlocked) {
-        Write-Verbose "LogBlocked needs change: $($current.LogBlocked) -> $logBlocked"
-        $needChange = $true
-      }
-      if ($current.LogIgnored -ne $logIgnored) {
-        Write-Verbose "LogIgnored needs change: $($current.LogIgnored) -> $logIgnored"
-        $needChange = $true
-      }
-      if ($current.LogMaxSizeKilobytes -ne $logMaxKB) {
-        Write-Verbose "LogMaxSizeKilobytes needs change: $($current.LogMaxSizeKilobytes) -> $logMaxKB"
-        $needChange = $true
-      }
+# # Ensure TLS1.2 & PSGallery/ NuGet provider are usable (idempotent)
+# - name: Ensure TLS1.2 & PSGallery/ NuGet provider are usable
+#   ansible.windows.win_powershell:
+#     script: |
+#       [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-      if ($needChange) {
-        Set-NetFirewallProfile -Name $profile `
-          -LogFileName $logFile `
-          -LogAllowed $logAllowed `
-          -LogBlocked $logBlocked `
-          -LogMaxSizeKilobytes $logMaxKB `
-          -LogIgnored $logIgnored
-        Write-Output "Changed logging for $profile"
-      } else {
-        Write-Output "No change for $profile"
-      }
-  loop: "{{ defos_firewall_profiles }}"
-  loop_control:
-    label: "{{ item.profile }}"
-  args:
-    # run elevated if needed; remove if your connection already runs with admin privileges
-    # remove/comment the next line if you're not using become
-    # become: yes
+#       $repo = Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue
+#       if (-not $repo) {
+#         Register-PSRepository -Default
+#         $repo = Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue
+#       }
+
+#       if ($repo -and $repo.InstallationPolicy -ne 'Trusted') {
+#         try { Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -ErrorAction Stop } catch {}
+#       }
+
+#       if (-not (Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue)) {
+#         Install-PackageProvider -Name NuGet -Force -Confirm:$false
+#       }
+
+#       Write-Output "PSGallery/PackageProvider ready"
+#   register: _defos_psgallery_check
+#   changed_when: false
+#   failed_when: _defos_psgallery_check.rc is defined and _defos_psgallery_check.rc != 0
+
+# # Install NetworkingDsc via community.windows.win_psmodule (idempotent)
+# - name: Install NetworkingDsc PowerShell module (community.windows.win_psmodule)
+#   community.windows.win_psmodule:
+#     name: NetworkingDsc
+#     state: present
+#     scope: AllUsers
+#     repository: PSGallery
+#     # allow_clobber: yes
+#   register: _defos_install_networkingdsc
+
+# # Configure FirewallProfile logging for Domain/Private/Public via NetworkingDsc (win_dsc)
+# - name: Configure FirewallProfile logging for Domain/Private/Public via NetworkingDsc (win_dsc)
+#   ansible.windows.win_dsc:
+#     resource_name: FirewallProfile
+#     # pass DSC properties as top-level keys (compatible with older/newer win_dsc)
+#     Name: "{{ item.profile }}"
+#     Enabled: true
+#     DefaultInboundAction: "{{ defos_default_inbound_action | default('Block') | title }}"
+#     DefaultOutboundAction: "{{ defos_default_outbound_action | default('Allow') | title }}"
+#     LogFileName: "{{ item.log_file }}"
+#     LogAllowed: "{{ defos_log_allowed | default(false) }}"
+#     LogIgnored: "{{ defos_log_ignored | default(false) }}"
+#     LogBlocked: "{{ defos_log_blocked | default(true) }}"
+#     LogMaxSizeKilobytes: "{{ defos_log_max_size_kb | default(16384) }}"
+#   loop: "{{ defos_firewall_profiles }}"
+#   loop_control:
+#     label: "{{ item.profile }}"
+#   register: _defos_dsc_firewall
+
+# # Disable SSL Time
+# - name: Ensure UtilizeSslTimeData is set (disable SSL time data)
+#   ansible.windows.win_regedit:
+#     path: 'HKLM:\SYSTEM\CurrentControlSet\Services\w32time\Config'
+#     name: 'UtilizeSslTimeData'
+#     data: "{{ defos_utilize_ssl_time_data }}"
+#     type: dword
+#     state: present
+
+# # Enable Remote Desktop (idempotent)
+# - name: Ensure RDP is enabled (fDenyTSConnections = 0)
+#   ansible.windows.win_regedit:
+#     path: 'HKLM:\System\CurrentControlSet\Control\Terminal Server'
+#     name: 'fDenyTSConnections'
+#     data: 0
+#     type: dword
+#     state: present
+#   when: defos_rdp_enable | default(true)
+
+# - name: Ensure Network Level Authentication (UserAuthentication) is set when requested
+#   ansible.windows.win_regedit:
+#     path: 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp'
+#     name: 'UserAuthentication'
+#     data: "{{ 1 if (defos_rdp_nla | default(true)) else 0 }}"
+#     type: dword
+#     state: present
+#   when: defos_rdp_enable | default(true)
+
+# - name: Ensure Remote Desktop Services (TermService) is enabled and running
+#   ansible.windows.win_service:
+#     name: "{{ defos_rdp_service_name }}"
+#     start_mode: auto
+#     state: started
+#   when: defos_rdp_enable | default(true)
+
+# - name: Enable built-in Remote Desktop firewall rules (all profiles)
+#   community.windows.win_firewall_rule:
+#     name: "{{ item }}"
+#     enabled: yes
+#     state: present
+#   loop:
+#     - "{{ defos_rdp_firewall_group }}"
+#     # Some Windows versions expose two rule names; ensure both common forms are tried:
+#     - "Remote Desktop - User Mode (TCP-In)"
+#     - "Remote Desktop - User Mode (UDP-In)"
+#   when: defos_rdp_enable | default(true)
+
+# # Rename built-in Administrator (SID RID 500)
+# - name: Rename built-in Administrator account (by SID)
+#   ansible.windows.win_powershell:
+#     script: |
+#       $u = Get-LocalUser -ErrorAction SilentlyContinue |
+#         Where-Object { $_.SID.Value -like '*-500' }
+
+#       if ($null -eq $u) {
+#         return @{ renamed = $false; msg = "No -500 account found" }
+#       }
+
+#       if ($u.Name -ne "{{ defos_admin_new_name }}") {
+#         Rename-LocalUser -InputObject $u -NewName "{{ defos_admin_new_name }}"
+#         return @{ renamed = $true; msg = "Renamed to {{ defos_admin_new_name }}" }
+#       } else {
+#         return @{ renamed = $false; msg = "Name already changed" }
+#       }
+#   register: admin_rename
+#   changed_when: admin_rename.output[0].renamed
+
+# # Rename built-in Guest (by SID)
+# - name: Rename built-in Guest account (by SID)
+#   ansible.windows.win_powershell:
+#     script: |
+#       $u = Get-LocalUser -ErrorAction SilentlyContinue |
+#         Where-Object { $_.SID.Value -like '*-501' }
+
+#       if ($null -eq $u) {
+#         return @{ renamed = $false; msg = "No -501 account found"; new_name = $null }
+#       }
+
+#       $desired = "{{ defos_guest_new_name }}"
+#       if ([string]::IsNullOrWhiteSpace($desired)) {
+#         $desired = "$env:COMPUTERNAME{{ defos_guest_new_suffix }}"
+#       }
+
+#       if ($u.Name -ne $desired) {
+#         Rename-LocalUser -InputObject $u -NewName $desired
+#         return @{ renamed = $true; msg = "Renamed to $desired"; new_name = $desired }
+#       } else {
+#         return @{ renamed = $false; msg = "Name already '$desired'"; new_name = $desired }
+#       }
+#   register: guest_rename
+#   changed_when: guest_rename.output[0].renamed
+
+# - name: Show rename result
+#   ansible.builtin.debug:
+#     msg: "{{ guest_rename.output[0].msg }} (new name: {{ guest_rename.output[0].new_name }})"
+
+# - name: Save guest account name for later plays
+#   ansible.builtin.set_fact:
+#     guest_account_name: "{{ guest_rename.output[0].new_name }}"
+
+# - name: Disable the renamed guest account
+#   ansible.windows.win_user:
+#     name: "{{ guest_account_name }}"
+#     account_disabled: true
+
+# - name: Set timezone to 'Eastern Standard Time' (GMT-05:00)
+#   ansible.windows.win_timezone:
+#     timezone: Eastern Standard Time
+
+# - name: Gather facts
+#   ansible.windows.setup:
+
+# - name: Show key Windows facts
+#   ansible.builtin.debug:
+#     msg: |
+#       ansible_distribution: {{ ansible_distribution }}
+#       ansible_os_installation_type: {{ ansible_os_installation_type }}
+
+# - name: Install git
+#   win_chocolatey:
+#     name: git
+#     version: "2.53.0"
+#     state: present
+
+# - name: Install PWSH
+#   win_chocolatey:
+#     name: pwsh
+#     version: "7.5.4"
+#     state: present
+
+# # Install ComputerManagementDsc via community.windows.win_psmodule (idempotent)
+# - name: Install ComputerManagementDsc PowerShell module (community.windows.win_psmodule)
+#   community.windows.win_psmodule:
+#     name: ComputerManagementDsc
+#     state: present
+#     scope: AllUsers
+#     repository: PSGallery
+#     # allow_clobber: yes
+#   register: _defos_install_computermanagementdsc
+
+# # Insatll SSH server via ComputerManagementDsc (win_dsc)
+# - name: Insatll SSH server via ComputerManagementDsc (win_dsc)
+#   ansible.windows.win_dsc:
+#     resource_name: WindowsCapability
+#     # pass DSC properties as top-level keys (compatible with older/newer win_dsc)
+#     Name: "OpenSSH.Server~~~~0.0.1.0"
+#     Ensure: present
+#   register: _defos_dsc_windowscapability

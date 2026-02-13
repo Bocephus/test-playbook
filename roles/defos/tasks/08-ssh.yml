@@ -1,0 +1,13 @@
+---
+- name: Install ComputerManagementDsc module
+  community.windows.win_psmodule:
+    name: ComputerManagementDsc
+    state: present
+    scope: AllUsers
+    repository: PSGallery
+
+- name: Install OpenSSH Server via DSC
+  ansible.windows.win_dsc:
+    resource_name: WindowsCapability
+    Name: "OpenSSH.Server~~~~0.0.1.0"
+    Ensure: present

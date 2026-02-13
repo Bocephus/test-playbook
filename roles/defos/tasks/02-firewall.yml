@@ -1,0 +1,48 @@
+---
+# Firewall profile configuration
+
+- name: Configure firewall enabled state and default actions per profile
+  ansible.windows.win_firewall:
+    profiles: "{{ [ item.profile ] }}"
+    state: enabled
+    inbound_action: "{{ defos_default_inbound_action }}"
+    outbound_action: "{{ defos_default_outbound_action }}"
+  loop: "{{ defos_firewall_profiles }}"
+  loop_control:
+    label: "{{ item.profile }}"
+
+# Ensure TLS1.2 & PSGallery/NuGet
+- name: Ensure TLS1.2 & PSGallery/ NuGet provider are usable
+  ansible.windows.win_powershell:
+    script: |
+      [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+      $repo = Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue
+      if (-not $repo) { Register-PSRepository -Default }
+      if (-not (Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue)) {
+        Install-PackageProvider -Name NuGet -Force -Confirm:$false
+      }
+      Write-Output "PSGallery ready"
+  changed_when: false
+
+- name: Install NetworkingDsc module
+  community.windows.win_psmodule:
+    name: NetworkingDsc
+    state: present
+    scope: AllUsers
+    repository: PSGallery
+
+- name: Configure FirewallProfile logging via NetworkingDsc
+  ansible.windows.win_dsc:
+    resource_name: FirewallProfile
+    Name: "{{ item.profile }}"
+    Enabled: true
+    DefaultInboundAction: "{{ defos_default_inbound_action | title }}"
+    DefaultOutboundAction: "{{ defos_default_outbound_action | title }}"
+    LogFileName: "{{ item.log_file }}"
+    LogAllowed: "{{ defos_log_allowed | default(false) }}"
+    LogIgnored: "{{ defos_log_ignored | default(false) }}"
+    LogBlocked: "{{ defos_log_blocked | default(true) }}"
+    LogMaxSizeKilobytes: "{{ defos_log_max_size_kb | default(16384) }}"
+  loop: "{{ defos_firewall_profiles }}"
+  loop_control:
+    label: "{{ item.profile }}"
