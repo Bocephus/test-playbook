@@ -42,8 +42,8 @@
   set_fact:
     guest_account_name: "{{ guest_rename.output[0].new_name }}"
 
-- name: Disable guest account
-  ansible.windows.win_user:
-    name: "{{ guest_account_name }}"
-    account_disabled: true
-  when: guest_account_name is defined
+# - name: Disable guest account
+#   ansible.windows.win_user:
+#     name: "{{ guest_account_name }}"
+#     account_disabled: true
+#   when: guest_account_name is defined
