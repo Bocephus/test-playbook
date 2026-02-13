@@ -24,11 +24,18 @@
       Write-Output "PSGallery ready"
   changed_when: false
 
+- name: Force import newer PowerShellGet
+  ansible.windows.win_powershell:
+    script: |
+      Import-Module PowerShellGet -MinimumVersion 2.0 -Force
+  changed_when: false
+
 - name: Install NetworkingDsc module
   community.windows.win_psmodule:
     name: NetworkingDsc
     state: present
     scope: AllUsers
+    accept_license: true
     repository: PSGallery
 
 - name: Configure FirewallProfile logging via NetworkingDsc

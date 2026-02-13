@@ -9,13 +9,13 @@
       ansible_os_installation_type: {{ ansible_os_installation_type }}
 
 - name: Install Git
-  win_chocolatey:
+  chocolatey.chocolatey.win_chocolatey:
     name: git
     version: "2.53.0"
     state: present
 
 - name: Install PowerShell 7
-  win_chocolatey:
+  chocolatey.chocolatey.win_chocolatey:
     name: pwsh
     version: "7.5.4"
     state: present
