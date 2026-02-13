@@ -4,5 +4,7 @@
   gather_facts: false
   collections:
     - ansible.windows
+    - community.windows
+    - chocolatey.chocolatey
   roles:
     - defos

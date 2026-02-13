@@ -1,0 +1,3 @@
+# No role dependencies
+# Added file to remove requirements warnings during molecule test runs
+roles: []

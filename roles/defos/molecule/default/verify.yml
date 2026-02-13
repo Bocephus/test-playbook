@@ -41,9 +41,10 @@
     defos_guest_new_name: ""
     defos_guest_new_suffix: "-Guest"
 
-  collections:
-    - ansible.windows
-    - community.windows
+  # collections:
+  #   - ansible.windows
+  #   - community.windows
+  #   - chocolatey.chocolatey
 
   tasks:
 
@@ -213,3 +214,44 @@
         that:
           - "ssh_cap.output[0].String in ['Installed','Present','State: Installed','State: Present']"
         fail_msg: "OpenSSH capability not present/installed: {{ ssh_cap.output[0] }}"
+
+    ####################################################################
+    # 8) Verify PowerShellGet 2.x is installed and loading by default
+    ####################################################################
+    - name: Read PowerShellGet module info
+      ansible.windows.win_powershell:
+        script: |
+          try {
+            $mod = Get-Module PowerShellGet -ListAvailable | Sort-Object Version -Descending | Select-Object -First 1
+            return @{
+              Name    = $mod.Name
+              Version = $mod.Version.ToString()
+              Path    = $mod.ModuleBase
+            }
+          } catch {
+            return @{
+              Name    = "error"
+              Version = "0"
+              Path    = "error"
+            }
+          }
+      register: psg_info
+      changed_when: false
+
+    - name: Assert PowerShellGet module is present
+      assert:
+        that:
+          - psg_info.output[0].Name == 'PowerShellGet'
+        fail_msg: "PowerShellGet module not found on system: {{ psg_info.output[0] }}"
+
+    - name: Assert PowerShellGet version is 2.x or higher
+      assert:
+        that:
+          - "(psg_info.output[0].Version is version('2.0.0', '>='))"
+        fail_msg: "PowerShellGet version is too old (found: {{ psg_info.output[0].Version }})"
+
+    - name: Assert PowerShellGet is loading from preferred module path
+      assert:
+        that:
+          - "'Program Files' in psg_info.output[0].Path"
+        fail_msg: "PowerShellGet is not loading from the preferred module path: {{ psg_info.output[0].Path }}"

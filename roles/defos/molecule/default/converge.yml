@@ -2,9 +2,10 @@
 - name: Converge
   hosts: windows-instance
   gather_facts: no
-  collections:
-    - ansible.windows
-    - community.windows
+  # collections:
+  #   - ansible.windows
+  #   - community.windows
+  #   - chocolatey.chocolatey
 
   tasks:
     - name: Import defos role from local path
