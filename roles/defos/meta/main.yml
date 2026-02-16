@@ -60,4 +60,4 @@ dependencies: []
   # if you add dependencies to this list.
 
 # Role version (keep in sync with CHANGELOG and tags/releases)
-role_version: "1.0.1"
+role_version: "1.0.2"
