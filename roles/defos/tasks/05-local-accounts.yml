@@ -29,6 +29,11 @@
         $desired = "$env:COMPUTERNAME{{ defos_guest_new_suffix }}"
       }
 
+      # Trim to a maximum of 20 characters
+      if ($desired.Length -gt 20) {
+        $desired = $desired.Substring(0, 20)
+      }
+
       if ($u.Name -ne $desired) {
         Rename-LocalUser -InputObject $u -NewName $desired
         return @{ renamed = $true; new_name = $desired }
