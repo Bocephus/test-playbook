@@ -5,13 +5,17 @@ All notable changes to this role will be documented in this file.
 Format: https://keepachangelog.com/en/1.0.0/
 
 ## [Unreleased]
+
+### Added
+- N/A
+
+## [1.0.4] - 2026-02-16
 ### Updated
 - If `## [Unreleased]` didn't exist, the script will prepend a normalized Unreleased header and proceed.
 - If `Unreleased` had content, that content is moved into the new version block and `Unreleased` becomes a clean stub ready for future notes.
 - If `Unreleased` was empty (or only whitespace), the script creates a stub and writes `- N/A` under `### Added` (so releases have non-empty notes).
 
 The script still updates roles/defos/meta/main.yml, commits, tags, and pushes.
-
 ## [1.0.2] - 2026-02-16
 ### Added
 - CHANGELOG.md to track changes
