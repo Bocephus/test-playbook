@@ -6,10 +6,13 @@ localhost ansible_connection=local
 ; W25C-TEST01 ansible_host=10.100.30.58
 ; W25C-TEST02 ansible_host=10.100.30.52
 
-W25C-TEST03 ansible_host=10.100.30.74
-W25C-TEST04 ansible_host=10.100.30.75
-W25G-TEST03 ansible_host=10.100.30.76
-W25G-TEST04 ansible_host=10.100.30.77
+; W25C-TEST03 ansible_host=10.100.30.74
+; W25C-TEST04 ansible_host=10.100.30.75
+; W25G-TEST03 ansible_host=10.100.30.76
+; W25G-TEST04 ansible_host=10.100.30.77
+
+W25C-TEST05 ansible_host=10.100.30.78
+W25G-TEST05 ansible_host=10.100.30.94
 
 [windows:vars]
 
