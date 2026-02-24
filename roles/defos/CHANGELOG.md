@@ -7,7 +7,9 @@ Format: https://keepachangelog.com/en/1.0.0/
 ## [Unreleased]
 
 ### Added
-- N/A
+- PowerShell Module Logging
+- Process Creation Logging
+- PowerShell Script Logging
 
 ## [1.0.5] - 2026-02-24
 ### Updated
