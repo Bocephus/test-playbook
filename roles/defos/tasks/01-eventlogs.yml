@@ -1,5 +1,54 @@
 ---
-# Create SAL9000 Event Log Source and configure log sizes
+# --- PowerShell Module Logging ---
+
+- name: Ensure PowerShell ModuleLogging policy key exists
+  ansible.windows.win_regedit:
+    path: HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell\ModuleLogging
+    state: present
+
+- name: Enable PowerShell Module Logging (EnableModuleLogging=1)
+  ansible.windows.win_regedit:
+    path: HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell\ModuleLogging
+    name: EnableModuleLogging
+    data: 1
+    type: dword
+    state: present
+
+- name: Ensure PowerShell ModuleNames key exists
+  ansible.windows.win_regedit:
+    path: HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell\ModuleLogging\ModuleNames
+    state: present
+
+- name: Configure ModuleNames to log all modules ('*' = '*')
+  ansible.windows.win_regedit:
+    path: HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell\ModuleLogging\ModuleNames
+    name: '*'
+    data: '*'
+    type: string
+    state: present
+
+# --- Process Logging ---
+
+- name: Enable logging for process creation
+  ansible.windows.win_regedit:
+    path: HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System\Audit
+    name: 'ProcessCreationIncludeCmdLine_Enabled'
+    data: '1'
+    type: dword
+    state: present
+
+# --- Script Logging ---
+
+- name: Enable logging for process creation
+  ansible.windows.win_regedit:
+    path: HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell\ScriptBlockLogging
+    name: 'EnableScriptBlockLogging'
+    data: '1'
+    type: dword
+    state: present
+
+# --- Create SAL9000 Event Log Source and configure log sizes ---
+
 - name: Ensure 'SAL9000-Event' event source exists
   ansible.windows.win_eventlog:
     name: "{{ event_log_name }}"
@@ -8,11 +57,7 @@
     state: present
   register: sal9000_eventlog_result
 
-# Optional debug (remove in CI) so you can see converge output
-# - name: Debug sal9000_eventlog_result
-#   debug:
-#     var: sal9000_eventlog_result
-
+# --- Configure log sizes for all relevant event logs ---
 - name: Configure Event Logs
   ansible.windows.win_eventlog:
     name: "{{ item }}"
