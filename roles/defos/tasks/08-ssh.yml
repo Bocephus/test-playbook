@@ -6,8 +6,84 @@
     scope: AllUsers
     repository: PSGallery
 
+# Install OpenSSH Server (Feature on Demand)
+# Docs confirm FoD capability name and that config lives under %ProgramData%\ssh\*.  [1](https://learn.microsoft.com/en-us/windows-server/administration/openssh/openssh_install_firstuse)[2](https://learn.microsoft.com/en-us/windows-server/administration/OpenSSH/openssh-server-configuration)
 - name: Install OpenSSH Server via DSC
   ansible.windows.win_dsc:
     resource_name: WindowsCapability
     Name: "OpenSSH.Server~~~~0.0.1.0"
     Ensure: present
+  register: openssh_install
+
+# Ensure a Windows Firewall inbound rule exists for TCP/22 (create if missing)  [4](https://learn.microsoft.com/en-us/troubleshoot/windows-server/system-management-components/troubleshoot-openssh-windows-firewall-port22)
+- name: Ensure OpenSSH firewall rule exists
+  ansible.windows.win_powershell:
+    script: |
+      if (-not (Get-NetFirewallRule -Name 'OpenSSH-Server-In-TCP' -ErrorAction SilentlyContinue)) {
+        New-NetFirewallRule -Name 'OpenSSH-Server-In-TCP' `
+          -DisplayName 'OpenSSH Server (SSH)' `
+          -Enabled True -Direction Inbound -Protocol TCP -Action Allow -LocalPort 22 | Out-Null
+        'created'
+      } else {
+        # make sure it is enabled
+        Set-NetFirewallRule -Name 'OpenSSH-Server-In-TCP' -Enabled True | Out-Null
+        'present'
+      }
+  register: fw_rule
+
+# Set the default shell for SSH sessions to PowerShell 7 (pwsh.exe)
+# The supported/official way is HKLM:\SOFTWARE\OpenSSH\DefaultShell.  [2](https://learn.microsoft.com/en-us/windows-server/administration/OpenSSH/openssh-server-configuration)[3](https://github.com/PowerShell/Win32-OpenSSH/wiki/DefaultShell)
+- name: Configure OpenSSH DefaultShell to PowerShell 7
+  ansible.windows.win_regedit:
+    path: HKLM:\SOFTWARE\OpenSSH
+    name: DefaultShell
+    data: 'C:\Program Files\PowerShell\7\pwsh.exe'
+    type: string
+    state: present
+  register: default_shell
+
+# Ensure the ProgramData\ssh directory exists (created on first service start, but we ensure it anyway)
+- name: Ensure C:\ProgramData\ssh exists
+  ansible.windows.win_file:
+    path: C:\ProgramData\ssh
+    state: directory
+
+# Place your sshd_config (template below) in the correct location for Windows
+# Microsoft docs state sshd reads from %ProgramData%\ssh\sshd_config.  [2](https://learn.microsoft.com/en-us/windows-server/administration/OpenSSH/openssh-server-configuration)
+- name: Deploy sshd_config
+  ansible.windows.win_template:
+    src: sshd_config.j2
+    dest: C:\ProgramData\ssh\sshd_config
+    newline_sequence: '\r\n'
+  register: sshd_config_file
+
+# OPTIONAL (recommended): tighten administrators_authorized_keys permissions if you use it
+# The default location for admin-authorized keys is %ProgramData%\ssh\administrators_authorized_keys (if used).  [5](https://github.com/PowerShell/Win32-OpenSSH/wiki/sshd_config)
+- name: Ensure administrators_authorized_keys ACLs are strict (if file exists)
+  ansible.windows.win_powershell:
+    script: |
+      $p = 'C:\ProgramData\ssh\administrators_authorized_keys'
+      if (Test-Path $p) {
+        icacls $p /inheritance:r | Out-Null
+        icacls $p /grant 'SYSTEM:R' | Out-Null
+        icacls $p /grant 'BUILTIN\Administrators:F' | Out-Null
+        'hardened'
+      } else {
+        'absent'
+      }
+  register: admin_keys_acl
+  changed_when: admin_keys_acl.output == 'hardened'
+
+# Start and configure the sshd service
+- name: Ensure sshd service is set to automatic and running
+  ansible.windows.win_service:
+    name: sshd
+    start_mode: auto
+    state: started
+
+# Restart the service if we changed config or the default shell
+- name: Restart sshd if config or defaultshell changed
+  ansible.windows.win_service:
+    name: sshd
+    state: restarted
+  when: sshd_config_file.changed or default_shell.changed or (openssh_install is changed) or (fw_rule.output is defined and fw_rule.output == 'created')

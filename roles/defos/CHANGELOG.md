@@ -6,8 +6,9 @@ Format: https://keepachangelog.com/en/1.0.0/
 
 ## [Unreleased]
 
-### Added
-- N/A
+### Updated
+- `roles/defos/tasks/07-packages.yml` to install .NET 4.8 on Server 2019 prior to installing chocolatey packages
+- `roles/defos/tasks/08-ssh.yml` Updated to ensure the service is started and set to automatic, and configured a jinja2 template that is applied to the host to configure the SSHD service
 
 ## [1.0.4] - 2026-02-16
 ### Updated

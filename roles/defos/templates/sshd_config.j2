@@ -1,4 +1,6 @@
-{% if ansible_distribution_version is version('10.0.26100.0', '>=') %}
+{% set osver = ansible_facts['distribution_version'] | default(ansible_distribution_version | default('0')) %}
+{% if osver is version('10.0.26100.0', '>=') %}
+
 # Windows Server 2025 or newer
 PubkeyAuthentication yes
 PasswordAuthentication no
@@ -6,17 +8,17 @@ PermitEmptyPasswords no
 # Use PowerShell 7 (sshd default shell is set by registry; this subsystem is for SSH remoting of pwsh)
 Subsystem powershell "C:/Program Files/PowerShell/7/pwsh.exe" -sshs -NoLogo -NoProfile
 AllowGroups administrators "openssh users"
-Match address 10.100.30.40
+Match address 10.100.30.241
   PasswordAuthentication yes
 
-{% elif ansible_distribution_version is version('10.0.17763', '>=') %}
+{% elif osver is version('10.0.17763', '>=') %}
 # Windows Server 2019 or newer
 PubkeyAuthentication yes
 PasswordAuthentication no
 PermitEmptyPasswords no
 Subsystem powershell "C:/Program Files/PowerShell/7/pwsh.exe" -sshs -NoLogo -NoProfile
 AllowGroups administrators "openssh users"
-Match address 10.100.30.40
+Match address 10.100.30.241
   PasswordAuthentication yes
 
 {% else %}
@@ -26,6 +28,6 @@ PasswordAuthentication no
 PermitEmptyPasswords no
 Subsystem powershell "C:/Program Files/PowerShell/7/pwsh.exe" -sshs -NoLogo -NoProfile
 AllowGroups administrators "openssh users"
-Match address 10.100.30.40
+Match address 10.100.30.241
   PasswordAuthentication yes
 {% endif %}
