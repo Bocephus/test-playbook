@@ -48,3 +48,45 @@ defos_admin_new_name: "WinAdmin"
 # If defos_guest_new_name is empty, the role will compute "<COMPUTERNAME>{{ defos_guest_new_suffix }}"
 defos_guest_new_name: ""          # e.g. "MyGuestAccount"  (leave empty to use computed name)
 defos_guest_new_suffix: "-Guest"  # default suffix used when defos_guest_new_name is empty
+
+# Sevices to disable
+services_to_disable:
+  - AppMgmt    # Application Management
+  - HidServ    # Human Interface Device Service
+  - RasMan     # Remote Access Connection Manager
+  - Spooler    # Print Spooler (not present on Server Core 10.0.17763)
+
+# --- Global toggles ---
+defos_enable_firewall_rules: true
+defos_enable_rdp_rules: true
+defos_enable_remoteadmin_rules: true
+defos_disable_builtin_rules: true
+defos_enable_ssh_rules: true
+
+# --- Common group/prefix for rules we manage ---
+defos_firewall_group: ANS_remoteadmin_base     # unified group for all our rules
+defos_rule_prefix_rdp:  "ANS-RDP"
+defos_rule_prefix_rem:  "ANS-RemAdm"
+defos_rule_prefix_ssh: "ANS-SSH"   # e.g., ANS-SSH-Server-In-TCP
+
+# --- Profiles to apply (Domain, Private, Public) ---
+defos_firewall_profile:
+  - Domain
+  - Private
+  - Public
+
+# --- Management IPs (allowlist for inbound access) ---
+defos_mgmt_ips:                           # merged list reused by both RDP & RemoteAdmin
+  - 10.100.20.52
+  - 10.100.30.108
+  - 10.100.30.236
+  - 10.100.30.34
+  - 10.100.30.64
+  - 10.100.30.241
+
+# --- SSH allowlist (by default = mgmt IPs + OME) ---
+# If you already added 10.100.30.40 to defos_mgmt_ips, you can set defos_ssh_extra_ips: []
+defos_ssh_extra_ips:
+  - 10.100.30.40      # OME
+
+defos_ssh_ips: "{{ (defos_mgmt_ips + defos_ssh_extra_ips) | unique }}"

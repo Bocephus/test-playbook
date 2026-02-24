@@ -1,0 +1,223 @@
+---
+# --- 1. Disable built-in Windows rules (only when present) ---
+- name: Disable built-in remote admin firewall rules (if present)
+  ansible.windows.win_powershell:
+    script: |
+      $rules = @(
+        'RemoteTask-In-TCP',
+        'RemoteTask-RPCSS-In-TCP',
+        'WINRM-HTTP-In-TCP',
+        'WINRM-HTTP-In-TCP-PUBLIC',
+        'RVM-VDS-In-TCP',
+        'RVM-VDSLDR-In-TCP',
+        'RVM-RPCSS-In-TCP',
+        'RemoteEventLogSvc-In-TCP',
+        'RemoteEventLogSvc-NP-In-TCP',
+        'RemoteEventLogSvc-RPCSS-In-TCP',
+        'RemoteSvcAdmin-In-TCP',
+        'RemoteSvcAdmin-NP-In-TCP',
+        'RemoteSvcAdmin-RPCSS-In-TCP',
+        'RemoteFwAdmin-In-TCP',
+        'RemoteFwAdmin-RPCSS-In-TCP',
+        'FPS-NB_Session-In-TCP',
+        'FPS-SMB-In-TCP',
+        'FPS-NB_Name-In-UDP',
+        'FPS-NB_Datagram-In-UDP',
+        'FPS-RPCSS-In-TCP',
+        'FPS-ICMP4-ERQ-In',
+        'FPS-LLMNR-In-UDP'
+      )
+
+      $changed = $false
+      foreach ($r in $rules) {
+        $rule = Get-NetFirewallRule -Name $r -ErrorAction SilentlyContinue
+        if ($rule -and $rule.Enabled -ne 'False') {
+          Disable-NetFirewallRule -Name $r | Out-Null
+          $changed = $true
+        }
+      }
+
+      if ($changed) { 'changed' } else { 'ok' }
+  register: builtin_remoteadmin_disable
+
+  changed_when: >
+    (builtin_remoteadmin_disable.output | default([]) | map('lower') | list) is contains('changed')
+
+
+# --- 2. Create our ANS Remote Admin Rules (data-driven) ---
+# Rule specifications (much easier to maintain long term)
+- name: Define remote admin rule list
+  set_fact:
+    defos_remoteadmin_rules:
+      # --- Remote Task Scheduler ---
+      # Remote Task Scheduler — RPC (dynamic RPC, no fixed port)
+      - { name: "ANS-RemAdm-RemoteTask-In-TCP",
+          desc: "Remote Task Scheduler via RPC/TCP",
+          program: "%SystemRoot%\\System32\\svchost.exe",
+          protocol: "TCP",
+          localport: "135" }   # FIXED
+
+      - { name: "ANS-RemAdm-RemoteTask-RPCSS-In-TCP",
+          desc: "RPCSS endpoint map for Remote Task Scheduler",
+          program: "%SystemRoot%\\System32\\svchost.exe",
+          protocol: "TCP",
+          localport: "135" }   # FIXED
+
+
+      # --- WinRM ---
+      - { name: "ANS-RemAdm-WINRM-HTTP-In-TCP",
+          desc: "WinRM HTTP (TCP 5985)",
+          program: "System",
+          protocol: "TCP",
+          localport: "5985" }
+
+      - { name: "ANS-RemAdm-WINRM-HTTPS-In-TCP",
+          desc: "WinRM HTTPS (TCP 5986)",
+          program: "System",
+          protocol: "TCP",
+          localport: "5986" }
+
+      # --- Remote Volume Management (VDS, VDS Loader, RPCSS) ---
+      # Remote Volume Mgmt — VDS
+      - { name: "ANS-RemAdm-RVM-VDS-In-TCP",
+          desc: "VDS RPC/TCP remote management",
+          program: "%SystemRoot%\\System32\\vds.exe",
+          protocol: "TCP",
+          localport: "135" }   # FIXED
+
+      - { name: "ANS-RemAdm-RVM-VDSLDR-In-TCP",
+          desc: "VDS Loader RPC/TCP remote management",
+          program: "%SystemRoot%\\System32\\vdsldr.exe",
+          protocol: "TCP",
+          localport: "135" }   # FIXED
+
+      - { name: "ANS-RemAdm-RVM-RPCSS-In-TCP",
+          desc: "VDS RPCSS endpoint mapper",
+          program: "%SystemRoot%\\System32\\svchost.exe",
+          protocol: "TCP",
+          localport: "135" }   # FIXED
+
+      # --- Remote Event Log Service (RPC, NP, RPCSS) ---
+      - { name: "ANS-RemAdm-RemoteEventLogSvc-In-TCP",
+          desc: "Remote Event Log via RPC/TCP",
+          program: "%SystemRoot%\\System32\\svchost.exe",
+          protocol: "TCP",
+          localport: "135" }   # FIXED
+
+      - { name: "ANS-RemAdm-RemoteEventLogSvc-NP-In-TCP",
+          desc: "Remote Event Log via Named Pipes (TCP 445)",
+          program: "System",
+          protocol: "TCP",
+          localport: "445" }
+
+      - { name: "ANS-RemAdm-RemoteEventLogSvc-RPCSS-In-TCP",
+          desc: "Event Log RPCSS endpoint mapper",
+          program: "%SystemRoot%\\System32\\svchost.exe",
+          protocol: "TCP",
+          localport: "135" }   # FIXED
+
+      # --- Remote Service Management (RPC, NP, RPCSS) ---
+      - { name: "ANS-RemAdm-RemoteSvcAdmin-In-TCP",
+          desc: "Remote Service Management via RPC/TCP",
+          program: "%SystemRoot%\\System32\\services.exe",
+          protocol: "TCP",
+          localport: "135" }   # FIXED
+
+      - { name: "ANS-RemAdm-RemoteSvcAdmin-NP-In-TCP",
+          desc: "Remote Service Management via Named Pipes (TCP 445)",
+          program: "System",
+          protocol: "TCP",
+          localport: "445" }
+
+      - { name: "ANS-RemAdm-RemoteSvcAdmin-RPCSS-In-TCP",
+          desc: "Remote Service Mgmt RPCSS endpoint mapper",
+          program: "%SystemRoot%\\System32\\svchost.exe",
+          protocol: "TCP",
+          localport: "135" }   # FIXED
+
+      # --- Windows Firewall Remote Management ---
+      - { name: "ANS-RemAdm-RemoteFwAdmin-In-TCP",
+          desc: "Windows Firewall Remote Mgmt (RPC/TCP)",
+          program: "%SystemRoot%\\System32\\svchost.exe",
+          protocol: "TCP",
+          localport: "135" }   # FIXED
+
+      - { name: "ANS-RemAdm-RemoteFwAdmin-RPCSS-In-TCP",
+          desc: "Windows Firewall Remote Mgmt RPCSS",
+          program: "%SystemRoot%\\System32\\svchost.exe",
+          protocol: "TCP",
+          localport: "135" }   # FIXED
+
+      # --- ICMP echo allow ---
+      - { name: "ANS-RemAdm-ICMPAllow",
+          desc: "ICMPv4 Echo Request",
+          program: "System",
+          protocol: "ICMPv4",
+          icmp_type: "8" }
+
+      # --- File & Printer Sharing rules ---
+      - { name: "ANS-RemAdm-FPS-NB_Session-In-TCP",
+          desc: "NetBIOS Session (TCP 139)",
+          program: "System",
+          protocol: "TCP",
+          localport: "139" }
+
+      - { name: "ANS-RemAdm-FPS-SMB-In-TCP",
+          desc: "SMB over TCP (TCP 445)",
+          program: "System",
+          protocol: "TCP",
+          localport: "445" }
+
+      - { name: "ANS-RemAdm-FPS-NB_Name-In-UDP",
+          desc: "NetBIOS Name Service (UDP 137)",
+          program: "System",
+          protocol: "UDP",
+          localport: "137" }
+
+      - { name: "ANS-RemAdm-FPS-NB_Datagram-In-UDP",
+          desc: "NetBIOS Datagram (UDP 138)",
+          program: "System",
+          protocol: "UDP",
+          localport: "138" }
+
+      - { name: "ANS-RemAdm-FPS-RPCSS-In-TCP",
+          desc: "File+Print Spooler RPCSS",
+          program: "%SystemRoot%\\System32\\svchost.exe",
+          protocol: "TCP",
+          localport: "135" }   # FIXED
+
+      - { name: "ANS-RemAdm-FPS-ICMP4-ERQ-In",
+          desc: "File & Printer Sharing — ICMPv4 Echo Request",
+          program: "System",
+          protocol: "ICMPv4",
+          icmp_type: "8" }
+
+      - { name: "ANS-RemAdm-FPS-LLMNR-In-UDP",
+          desc: "LLMNR UDP 5355",
+          program: "%SystemRoot%\\System32\\svchost.exe",
+          protocol: "UDP",
+          localport: "5355" }
+
+# --- 3. Create all allow rules ---
+- name: Apply ANS Remote Admin firewall rules
+  community.windows.win_firewall_rule:
+    name: "{{ item.name }}"
+    display_name: "{{ item.name }}"
+    description: "{{ item.desc }}"
+    group: "{{ defos_remoteadmin_group }}"
+    action: allow
+    direction: in
+    enabled: yes
+    profiles:
+      - Domain
+      - Private
+      - Public
+    program: "{{ item.program }}"
+    protocol: "{{ item.protocol }}"
+    remoteip: "{{ defos_remoteadmin_mgmt_ips | join(',') }}"
+    localport: "{{ item.localport | default(omit) }}"
+    icmp_type: "{{ item.icmp_type | default(omit) }}"
+    state: present
+  loop: "{{ defos_remoteadmin_rules }}"
+  loop_control:
+    label: "{{ item.name }}"

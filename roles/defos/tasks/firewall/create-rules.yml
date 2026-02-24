@@ -1,0 +1,177 @@
+---
+# (Optional) Validate IP list – requires ansible.utils collection
+- name: DEFOS | Firewall | Validate management IPs (regex + bounds, no deps)
+  ansible.builtin.assert:
+    that:
+      - item is match('^(?:\\d{1,3}\\.){3}\\d{1,3}$')
+      - (item.split('.')[0] | int) <= 255
+      - (item.split('.')[1] | int) <= 255
+      - (item.split('.')[2] | int) <= 255
+      - (item.split('.')[3] | int) <= 255
+    fail_msg: "Invalid IPv4 address in defos_mgmt_ips: {{ item }}"
+  loop: "{{ defos_mgmt_ips | default([]) }}"
+  tags: [firewall, validate]
+
+# ---------- RDP rules ----------
+- name: DEFOS | Firewall | Define RDP rule set
+  ansible.builtin.set_fact:
+    defos_firewall_rules_rdp:
+      - { name: "{{ defos_rule_prefix_rdp }}-UserMode-In-TCP",
+          desc: "Remote Desktop - User Mode (TCP-In) [TCP 3389]",
+          program: "%SystemRoot%\\System32\\svchost.exe",
+          protocol: "TCP", localport: "3389" }
+
+      - { name: "{{ defos_rule_prefix_rdp }}-UserMode-In-UDP",
+          desc: "Remote Desktop - User Mode (UDP-In) [UDP 3389]",
+          program: "%SystemRoot%\\System32\\svchost.exe",
+          protocol: "UDP", localport: "3389" }
+
+      # Shadow over TCP - keep ANY port, program-scoped
+      - { name: "{{ defos_rule_prefix_rdp }}-Shadow-In-TCP",
+          desc: "Remote Desktop - Shadow (TCP-In)",
+          program: "%SystemRoot%\\System32\\svchost.exe",
+          protocol: "TCP" }
+
+  when: defos_enable_rdp_rules | bool
+  tags: [firewall, rdp]
+
+# ---------- SSH rules ----------
+- name: DEFOS | Firewall | Define SSH rule set
+  ansible.builtin.set_fact:
+    defos_firewall_rules_ssh:
+      - { name: "{{ defos_rule_prefix_ssh }}-Server-In-TCP",
+          desc: "OpenSSH Server (sshd) [TCP 22]",
+          # 'program' is optional; Windows will match the port/proto.
+          # If you want to bind to the binary, uncomment the program line below.
+          # program: "%SystemRoot%\\System32\\OpenSSH\\sshd.exe",
+          protocol: "TCP",
+          localport: "22",
+          # Use SSH-specific IP list (mgmt + OME by default)
+          remoteip: "{{ defos_ssh_ips }}" }
+  when: defos_enable_ssh_rules | bool
+  tags: [firewall, ssh]
+
+# ---------- RemoteAdmin rules ----------
+# NOTE: All RPC/RPCSS aliases must be numeric; use TCP 135 for RPC endpoint mapper.
+- name: DEFOS | Firewall | Define RemoteAdmin rule set
+  ansible.builtin.set_fact:
+    defos_firewall_rules_remoteadmin:
+      # Remote Task Scheduler
+      - { name: "{{ defos_rule_prefix_rem }}-RemoteTask-In-TCP",
+          desc: "Remote Task Scheduler via RPC/TCP (TCP 135)",
+          program: "%SystemRoot%\\System32\\svchost.exe", protocol: "TCP", localport: "135" }
+      - { name: "{{ defos_rule_prefix_rem }}-RemoteTask-RPCSS-In-TCP",
+          desc: "RPCSS for Remote Task Scheduler (TCP 135)",
+          program: "%SystemRoot%\\System32\\svchost.exe", protocol: "TCP", localport: "135" }
+
+      # WinRM
+      - { name: "{{ defos_rule_prefix_rem }}-WINRM-HTTP-In-TCP",
+          desc: "Windows Remote Management HTTP (TCP 5985)",
+          program: "System", protocol: "TCP", localport: "5985" }
+      - { name: "{{ defos_rule_prefix_rem }}-WINRM-HTTPS-In-TCP",
+          desc: "Windows Remote Management HTTPS (TCP 5986)",
+          program: "System", protocol: "TCP", localport: "5986" }
+
+      # Remote Volume Management
+      - { name: "{{ defos_rule_prefix_rem }}-RVM-VDS-In-TCP",
+          desc: "VDS (RPC/TCP 135)",
+          program: "%SystemRoot%\\System32\\vds.exe", protocol: "TCP", localport: "135" }
+      - { name: "{{ defos_rule_prefix_rem }}-RVM-VDSLDR-In-TCP",
+          desc: "VDS Loader (RPC/TCP 135)",
+          program: "%SystemRoot%\\System32\\vdsldr.exe", protocol: "TCP", localport: "135" }
+      - { name: "{{ defos_rule_prefix_rem }}-RVM-RPCSS-In-TCP",
+          desc: "VDS RPCSS (TCP 135)",
+          program: "%SystemRoot%\\System32\\svchost.exe", protocol: "TCP", localport: "135" }
+
+      # Remote Event Log Service
+      - { name: "{{ defos_rule_prefix_rem }}-RemoteEventLogSvc-In-TCP",
+          desc: "Remote Event Log via RPC/TCP 135",
+          program: "%SystemRoot%\\System32\\svchost.exe", protocol: "TCP", localport: "135" }
+      - { name: "{{ defos_rule_prefix_rem }}-RemoteEventLogSvc-NP-In-TCP",
+          desc: "Remote Event Log via Named Pipes (TCP 445)",
+          program: "System", protocol: "TCP", localport: "445" }
+      - { name: "{{ defos_rule_prefix_rem }}-RemoteEventLogSvc-RPCSS-In-TCP",
+          desc: "Event Log RPCSS (TCP 135)",
+          program: "%SystemRoot%\\System32\\svchost.exe", protocol: "TCP", localport: "135" }
+
+      # Remote Service Management
+      - { name: "{{ defos_rule_prefix_rem }}-RemoteSvcAdmin-In-TCP",
+          desc: "Remote Service Mgmt via RPC/TCP 135",
+          program: "%SystemRoot%\\System32\\services.exe", protocol: "TCP", localport: "135" }
+      - { name: "{{ defos_rule_prefix_rem }}-RemoteSvcAdmin-NP-In-TCP",
+          desc: "Remote Service Mgmt via Named Pipes (TCP 445)",
+          program: "System", protocol: "TCP", localport: "445" }
+      - { name: "{{ defos_rule_prefix_rem }}-RemoteSvcAdmin-RPCSS-In-TCP",
+          desc: "Remote Service Mgmt RPCSS (TCP 135)",
+          program: "%SystemRoot%\\System32\\svchost.exe", protocol: "TCP", localport: "135" }
+
+      # Windows Firewall Remote Mgmt
+      - { name: "{{ defos_rule_prefix_rem }}-RemoteFwAdmin-In-TCP",
+          desc: "Windows Firewall Remote Mgmt (RPC/TCP 135)",
+          program: "%SystemRoot%\\System32\\svchost.exe", protocol: "TCP", localport: "135" }
+      - { name: "{{ defos_rule_prefix_rem }}-RemoteFwAdmin-RPCSS-In-TCP",
+          desc: "Windows Firewall Remote Mgmt RPCSS (TCP 135)",
+          program: "%SystemRoot%\\System32\\svchost.exe", protocol: "TCP", localport: "135" }
+
+      # ICMP allow (mgmt scope)
+      - { name: "{{ defos_rule_prefix_rem }}-ICMPAllow",
+          desc: "ICMPv4 Echo Request",
+          program: "System", protocol: "ICMPv4", icmp_type: "8" }
+
+      # File & Printer Sharing
+      - { name: "{{ defos_rule_prefix_rem }}-FPS-NB_Session-In-TCP",
+          desc: "NetBIOS Session (TCP 139)",
+          program: "System", protocol: "TCP", localport: "139" }
+      - { name: "{{ defos_rule_prefix_rem }}-FPS-SMB-In-TCP",
+          desc: "SMB over TCP (TCP 445)",
+          program: "System", protocol: "TCP", localport: "445" }
+      - { name: "{{ defos_rule_prefix_rem }}-FPS-NB_Name-In-UDP",
+          desc: "NetBIOS Name Service (UDP 137)",
+          program: "System", protocol: "UDP", localport: "137" }
+      - { name: "{{ defos_rule_prefix_rem }}-FPS-NB_Datagram-In-UDP",
+          desc: "NetBIOS Datagram (UDP 138)",
+          program: "System", protocol: "UDP", localport: "138" }
+      - { name: "{{ defos_rule_prefix_rem }}-FPS-RPCSS-In-TCP",
+          desc: "File+Print Spooler RPCSS (TCP 135)",
+          program: "%SystemRoot%\\System32\\svchost.exe", protocol: "TCP", localport: "135" }
+      - { name: "{{ defos_rule_prefix_rem }}-FPS-ICMP4-ERQ-In",
+          desc: "File & Printer Sharing — ICMPv4 Echo Request",
+          program: "System", protocol: "ICMPv4", icmp_type: "8" }
+      - { name: "{{ defos_rule_prefix_rem }}-FPS-LLMNR-In-UDP",
+          desc: "LLMNR (UDP 5355)",
+          program: "%SystemRoot%\\System32\\svchost.exe", protocol: "UDP", localport: "5355" }
+  when: defos_enable_remoteadmin_rules | bool
+  tags: [firewall, remoteadmin]
+
+# ---------- Merge & apply (ordered) ----------
+# We prioritize RPC 135 rules before dependent/other rules for clarity.
+- name: DEFOS | Firewall | Merge rule sets in execution order
+  ansible.builtin.set_fact:
+    defos_firewall_rules: >-
+      {{
+        (defos_firewall_rules_rdp         | default([]))
+        + (defos_firewall_rules_remoteadmin | default([]))
+        + (defos_firewall_rules_ssh         | default([]))
+      }}
+
+  tags: [firewall]
+
+- name: DEFOS | Firewall | Apply unified RDP + RemoteAdmin rules
+  community.windows.win_firewall_rule:
+    name: "{{ item.name }}"
+    display_name: "{{ item.name }}"
+    description: "{{ item.desc }}"
+    group: "{{ defos_firewall_group }}"
+    direction: in
+    action: allow
+    enabled: yes
+    profiles: "{{ defos_firewall_profile }}"
+    program: "{{ item.program | default(omit) }}"        # <-- allow omission (SSH)
+    protocol: "{{ item.protocol }}"
+    remoteip: "{{ (item.remoteip | default(defos_mgmt_ips)) | join(',') }}"
+    localport: "{{ item.localport | default(omit) }}"
+    icmp_type: "{{ item.icmp_type | default(omit) }}"
+    state: present
+  loop: "{{ defos_firewall_rules }}"
+  loop_control: { label: "{{ item.name }}" }
+  tags: [firewall]

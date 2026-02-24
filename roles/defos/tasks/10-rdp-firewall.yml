@@ -1,0 +1,85 @@
+---
+# 1) Disable built-in RDP rules if they exist (don’t create anything)
+- name: Disable built-in Remote Desktop rules (if present)
+  ansible.windows.win_powershell:
+    script: |
+      $names = @(
+        'RemoteDesktop-UserMode-In-TCP',
+        'RemoteDesktop-UserMode-In-UDP',
+        'RemoteDesktop-Shadow-In-TCP'
+      )
+
+      $changed = $false
+      foreach ($n in $names) {
+        $rule = Get-NetFirewallRule -Name $n -ErrorAction SilentlyContinue
+        if ($null -ne $rule -and $rule.Enabled -ne 'False') {
+          Disable-NetFirewallRule -Name $n -ErrorAction SilentlyContinue | Out-Null
+          $changed = $true
+        }
+      }
+      if ($changed) { Write-Output 'changed' } else { Write-Output 'ok' }
+  register: builtin_rdp_disable
+  changed_when: >
+    (builtin_rdp_disable.output | default([]) | map('lower') | list) is contains('changed')
+  failed_when: builtin_rdp_disable is failed
+
+# 2) Create our hardened scoped ALLOW rules
+
+# TCP 3389
+- name: Ensure 'ANS-Mgmt-RemoteDesktop-UserMode-In-TCP' exists (ALLOW TCP/3389 from mgmt IPs)
+  community.windows.win_firewall_rule:
+    name: ANS-Mgmt-RemoteDesktop-UserMode-In-TCP
+    display_name: Remote Desktop - User Mode (TCP-In)
+    description: Inbound rule for the Remote Desktop service to allow RDP traffic. [TCP 3389]
+    group: "{{ defos_rdp_group }}"
+    profiles:
+      - Domain
+      - Private
+      - Public
+    direction: in
+    action: allow
+    enabled: true
+    protocol: TCP
+    localport: 3389
+    program: "{{ defos_rdp_program }}"
+    remoteip: "{{ defos_rdp_mgmt_ips | join(',') }}"
+    state: present
+
+# UDP 3389
+- name: Ensure 'ANS-RemoteDesktop-UserMode-In-UDP' exists (ALLOW UDP/3389 from mgmt IPs)
+  community.windows.win_firewall_rule:
+    name: ANS-RemoteDesktop-UserMode-In-UDP
+    display_name: Remote Desktop - User Mode (UDP-In)
+    description: Inbound rule for the Remote Desktop service to allow RDP traffic. [UDP 3389]
+    group: "{{ defos_rdp_group }}"
+    profiles:
+      - Domain
+      - Private
+      - Public
+    direction: in
+    action: allow
+    enabled: true
+    protocol: UDP
+    localport: 3389
+    program: "{{ defos_rdp_program }}"
+    remoteip: "{{ defos_rdp_mgmt_ips | join(',') }}"
+    state: present
+
+# Shadowing (no explicit port in Chef; scope by program and source IPs)
+- name: Ensure 'ANS-RemoteDesktop-Shadow-In-TCP' exists (ALLOW Shadow over TCP from mgmt IPs)
+  community.windows.win_firewall_rule:
+    name: ANS-RemoteDesktop-Shadow-In-TCP
+    display_name: Remote Desktop - Shadow (TCP-In)
+    description: Inbound rule to allow shadowing of an existing Remote Desktop session.
+    group: "{{ defos_rdp_group }}"
+    profiles:
+      - Domain
+      - Private
+      - Public
+    direction: in
+    action: allow
+    enabled: true
+    protocol: TCP
+    program: "{{ defos_rdp_program }}"
+    remoteip: "{{ defos_rdp_mgmt_ips | join(',') }}"
+    state: present
