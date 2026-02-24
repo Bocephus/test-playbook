@@ -22,26 +22,15 @@ BRANCH="$(git rev-parse --abbrev-ref HEAD || echo "unknown")"
 
 echo "Releasing $NEW_VERSION on branch $BRANCH"
 
-# 1) Update role_version in meta/main.yml (replace or append)
-if [ -f "$ROLE_META" ]; then
-  if grep -q '^[[:space:]]*role_version:' "$ROLE_META"; then
-    awk -v ver="$NEW_VERSION" '
-      BEGIN{replaced=0}
-      /^[[:space:]]*role_version:/ {
-        print "role_version: \"" ver "\""
-        replaced=1
-        next
-      }
-      { print }
-      END { if(!replaced) { print ""; print "role_version: \"" ver "\""} }
-    ' "$ROLE_META" > "${ROLE_META}.tmp" && mv "${ROLE_META}.tmp" "$ROLE_META"
-    echo "Updated existing role_version in $ROLE_META"
-  else
-    echo "" >> "$ROLE_META"
-    echo "role_version: \"$NEW_VERSION\"" >> "$ROLE_META"
-    echo "Appended role_version to $ROLE_META"
-  fi
-else
+# NOTE: We intentionally do NOT write `role_version` into meta/main.yml
+# because that key is not part of the official RoleMetadata schema and
+# causes validation errors with modern Ansible/Galaxy tooling.
+#
+# If you want to store a role version file, consider adding a separate
+# file (like roles/defos/VERSION) or rely on git tags and CHANGELOG.md.
+
+# 1) Validate meta/main.yml exists (we won't modify it)
+if [ ! -f "$ROLE_META" ]; then
   echo "ERROR: $ROLE_META not found; aborting."
   exit 4
 fi
@@ -98,8 +87,6 @@ else:
 new_version_block = "\n\n## [{}] - {}\n{}\n".format(ver, date, moved_content)
 
 # Construct a normalized Unreleased stub:
-# If the original Unreleased had no non-whitespace content, create a clean stub.
-# If it had content that we moved, create an empty, normalized Unreleased stub ready for future entries.
 unreleased_stub = "## [Unreleased]\n\n### Added\n- N/A\n\n"
 
 # Build new text:
@@ -122,11 +109,11 @@ print("Changelog updated: moved Unreleased content (if any) into new version hea
 PY
 
 # 3) Git add, commit, tag, push
-git add "$ROLE_META" "$CHANGELOG"
+git add "$CHANGELOG"
 if git diff --staged --quiet; then
   echo "No staged changes to commit."
 else
-  git commit -m "chore(defos): release $NEW_VERSION (update role_version and changelog)"
+  git commit -m "chore(defos): release $NEW_VERSION (update changelog)"
 fi
 
 git tag -a "$TAG" -m "Release $NEW_VERSION"
