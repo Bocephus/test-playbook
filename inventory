@@ -1,18 +1,17 @@
 localhost ansible_connection=local
 
 [windows]
-; W25G-TEST01 ansible_host=10.100.30.79
-; W25G-TEST02 ansible_host=10.100.30.84
-; W25C-TEST01 ansible_host=10.100.30.58
-; W25C-TEST02 ansible_host=10.100.30.52
+# Windows Server 2025
+W25C-TEST001 ansible_host=10.100.30.201
+W25G-TEST001 ansible_host=10.100.30.202
 
-; W25C-TEST03 ansible_host=10.100.30.74
-; W25C-TEST04 ansible_host=10.100.30.75
-; W25G-TEST03 ansible_host=10.100.30.76
-; W25G-TEST04 ansible_host=10.100.30.77
+# Windows Server 2022
+W22C-TEST001 ansible_host=10.100.30.203
+W22G-TEST001 ansible_host=10.100.30.204
 
-W25C-TEST05 ansible_host=10.100.30.78
-W25G-TEST05 ansible_host=10.100.30.94
+# Windows Server 2019
+W19C-TEST001 ansible_host=10.100.30.205
+W19G-TEST001 ansible_host=10.100.30.206
 
 [windows:vars]
 
