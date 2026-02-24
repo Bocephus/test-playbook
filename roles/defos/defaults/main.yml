@@ -48,3 +48,35 @@ defos_admin_new_name: "WinAdmin"
 # If defos_guest_new_name is empty, the role will compute "<COMPUTERNAME>{{ defos_guest_new_suffix }}"
 defos_guest_new_name: ""          # e.g. "MyGuestAccount"  (leave empty to use computed name)
 defos_guest_new_suffix: "-Guest"  # default suffix used when defos_guest_new_name is empty
+
+# Sevices to disable
+services_to_disable:
+  - AppMgmt    # Application Management
+  - HidServ    # Human Interface Device Service
+  - RasMan     # Remote Access Connection Manager
+  - Spooler    # Print Spooler (not present on Server Core 10.0.17763)
+
+# RDP management IP list (merge of the Chef arrays)
+defos_rdp_mgmt_ips:
+  - 10.100.20.52        # X670E_M1
+  - 10.100.30.108       # W25C_WAC001
+  - 10.100.30.236       # W25C_WAC002
+  - 10.100.30.34        # W25_MGMT01
+  - 10.100.30.241       # W25G_MGMT001
+
+# Common settings
+defos_rdp_group: ANS_rdp_mgmt
+defos_rdp_program: '%SystemRoot%\System32\svchost.exe'
+
+# Remote Admin Management Host IPs
+defos_remoteadmin_mgmt_ips:
+  - 10.100.20.52      # X670E_M1
+  - 10.100.30.108     # W25C_WAC001
+  - 10.100.30.236     # W25C_WAC002
+  - 10.100.30.34      # W25_MGMT01
+  - 10.100.30.64      # W25_CMDR01
+  - 10.100.30.241     # W25G_MGMT001
+
+# Group name for all firewall rules
+defos_remoteadmin_group: ANS_remoteadmin_base
+

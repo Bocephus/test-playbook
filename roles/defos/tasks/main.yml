@@ -31,6 +31,18 @@
   tags:
     - ssh
 
+- import_tasks: 09-services.yml
+  tags:
+    - services
+
+- import_tasks: 10-rdp-firewall.yml
+  tags:
+    - rdp-firewall
+
+- import_tasks: 11-remoteadmin-base.yml
+  tags:
+    - remoteadmin
+
 - import_tasks: 99-report-changes.yml
   tags:
     - report
