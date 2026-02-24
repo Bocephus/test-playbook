@@ -56,27 +56,37 @@ services_to_disable:
   - RasMan     # Remote Access Connection Manager
   - Spooler    # Print Spooler (not present on Server Core 10.0.17763)
 
-# RDP management IP list (merge of the Chef arrays)
-defos_rdp_mgmt_ips:
-  - 10.100.20.52        # X670E_M1
-  - 10.100.30.108       # W25C_WAC001
-  - 10.100.30.236       # W25C_WAC002
-  - 10.100.30.34        # W25_MGMT01
-  - 10.100.30.241       # W25G_MGMT001
+# --- Global toggles ---
+defos_enable_firewall_rules: true
+defos_enable_rdp_rules: true
+defos_enable_remoteadmin_rules: true
+defos_disable_builtin_rules: true
+defos_enable_ssh_rules: true
 
-# Common settings
-defos_rdp_group: ANS_rdp_mgmt
-defos_rdp_program: '%SystemRoot%\System32\svchost.exe'
+# --- Common group/prefix for rules we manage ---
+defos_firewall_group: ANS_remoteadmin_base     # unified group for all our rules
+defos_rule_prefix_rdp:  "ANS-RDP"
+defos_rule_prefix_rem:  "ANS-RemAdm"
+defos_rule_prefix_ssh: "ANS-SSH"   # e.g., ANS-SSH-Server-In-TCP
 
-# Remote Admin Management Host IPs
-defos_remoteadmin_mgmt_ips:
-  - 10.100.20.52      # X670E_M1
-  - 10.100.30.108     # W25C_WAC001
-  - 10.100.30.236     # W25C_WAC002
-  - 10.100.30.34      # W25_MGMT01
-  - 10.100.30.64      # W25_CMDR01
-  - 10.100.30.241     # W25G_MGMT001
+# --- Profiles to apply (Domain, Private, Public) ---
+defos_firewall_profile:
+  - Domain
+  - Private
+  - Public
 
-# Group name for all firewall rules
-defos_remoteadmin_group: ANS_remoteadmin_base
+# --- Management IPs (allowlist for inbound access) ---
+defos_mgmt_ips:                           # merged list reused by both RDP & RemoteAdmin
+  - 10.100.20.52
+  - 10.100.30.108
+  - 10.100.30.236
+  - 10.100.30.34
+  - 10.100.30.64
+  - 10.100.30.241
 
+# --- SSH allowlist (by default = mgmt IPs + OME) ---
+# If you already added 10.100.30.40 to defos_mgmt_ips, you can set defos_ssh_extra_ips: []
+defos_ssh_extra_ips:
+  - 10.100.30.40      # OME
+
+defos_ssh_ips: "{{ (defos_mgmt_ips + defos_ssh_extra_ips) | unique }}"

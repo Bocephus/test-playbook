@@ -3,9 +3,9 @@
   tags:
     - eventlogs
 
-- import_tasks: 02-firewall.yml
+- import_tasks: 02-firewall-config.yml
   tags:
-    - firewall
+    - firewall-conifg
 
 - import_tasks: 03-timesync.yml
   tags:
@@ -35,13 +35,19 @@
   tags:
     - services
 
-- import_tasks: 10-rdp-firewall.yml
-  tags:
-    - rdp-firewall
+- name: DEFOS | Firewall | Skip if globally disabled
+  ansible.builtin.meta: end_task
+  when: not defos_enable_firewall_rules | bool
 
-- import_tasks: 11-remoteadmin-base.yml
-  tags:
-    - remoteadmin
+- name: DEFOS | Firewall | Disable built-in rules (once)
+  import_tasks: firewall/disable-builtins.yml
+  when: defos_disable_builtin_rules | bool
+  tags: [firewall, builtin]
+
+- name: DEFOS | Firewall | Create managed rules (RDP + RemoteAdmin)
+  import_tasks: firewall/create-rules.yml
+  tags: [firewall, rdp, remoteadmin]
+
 
 - import_tasks: 99-report-changes.yml
   tags:

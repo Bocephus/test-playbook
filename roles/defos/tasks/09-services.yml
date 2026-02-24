@@ -1,0 +1,30 @@
+---
+- name: Lookup each service to see if it exists
+  ansible.windows.win_service_info:
+    name: "{{ item }}"
+  loop: "{{ services_to_disable }}"
+  register: svc_lookup
+  loop_control:
+    label: "{{ item }}"
+
+- name: Stop and disable services that exist
+  ansible.windows.win_service:
+    name: "{{ item.item }}"
+    state: stopped
+    start_mode: disabled
+  loop: "{{ svc_lookup.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when: (item.services | default([])) | length > 0
+  # If a service isn't installed (e.g., Spooler on Server Core), the above 'when'
+  # evaluates to false and this task is skipped for that service.
+
+# (Optional) Show a summary of what happened
+- name: Summarize service disable actions
+  ansible.builtin.debug:
+    msg: >-
+      Service '{{ item.item }}':
+      {{ 'disabled/stopped' if ((item.services | default([])) | length > 0) else 'not present - skipped' }}
+  loop: "{{ svc_lookup.results }}"
+  loop_control:
+    label: "{{ item.item }}"

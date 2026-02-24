@@ -1,0 +1,53 @@
+---
+- name: DEFOS | Firewall | Disable built-in rules (if present)
+  ansible.windows.win_powershell:
+    script: |
+      $rules = @(
+        # RDP built-ins
+        'RemoteDesktop-UserMode-In-TCP',
+        'RemoteDesktop-UserMode-In-UDP',
+        'RemoteDesktop-Shadow-In-TCP',
+
+        # RemoteAdmin built-ins
+        'RemoteTask-In-TCP',
+        'RemoteTask-RPCSS-In-TCP',
+        'WINRM-HTTP-In-TCP',
+        'WINRM-HTTP-In-TCP-PUBLIC',
+        'RVM-VDS-In-TCP',
+        'RVM-VDSLDR-In-TCP',
+        'RVM-RPCSS-In-TCP',
+        'RemoteEventLogSvc-In-TCP',
+        'RemoteEventLogSvc-NP-In-TCP',
+        'RemoteEventLogSvc-RPCSS-In-TCP',
+        'RemoteSvcAdmin-In-TCP',
+        'RemoteSvcAdmin-NP-In-TCP',
+        'RemoteSvcAdmin-RPCSS-In-TCP',
+        'RemoteFwAdmin-In-TCP',
+        'RemoteFwAdmin-RPCSS-In-TCP',
+        'FPS-NB_Session-In-TCP',
+        'FPS-SMB-In-TCP',
+        'FPS-NB_Name-In-UDP',
+        'FPS-NB_Datagram-In-UDP',
+        'FPS-RPCSS-In-TCP',
+        'FPS-ICMP4-ERQ-In',
+        'FPS-LLMNR-In-UDP'
+
+
+        # OpenSSH built-in
+        'OpenSSH-Server-In-TCP'    # <--- add this line
+
+      )
+
+      $changed = $false
+      foreach ($n in $rules) {
+        $rule = Get-NetFirewallRule -Name $n -ErrorAction SilentlyContinue
+        if ($null -ne $rule -and $rule.Enabled -ne 'False') {
+          Disable-NetFirewallRule -Name $n -ErrorAction SilentlyContinue | Out-Null
+          $changed = $true
+        }
+      }
+      if ($changed) { 'changed' } else { 'ok' }
+  register: defos_disable_builtin_result
+  changed_when: >
+    (defos_disable_builtin_result.output | default([]) | map('lower') | list) is contains('changed')
+  tags: [firewall, builtin]

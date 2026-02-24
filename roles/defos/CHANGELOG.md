@@ -12,6 +12,7 @@ Format: https://keepachangelog.com/en/1.0.0/
 - PowerShell Script Logging
 - Firewall rules for RDP
 - Firewall rules for remoteadmin base
+- Firewall rules for SSH
 
 ## [1.0.5] - 2026-02-24
 ### Updated
