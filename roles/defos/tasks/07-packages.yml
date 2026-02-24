@@ -5,17 +5,69 @@
 - name: Show key Windows facts
   debug:
     msg: |
-      ansible_distribution: {{ ansible_distribution }}
-      ansible_os_installation_type: {{ ansible_os_installation_type }}
+      ansible_facts.distribution: {{ ansible_facts['distribution'] | default('unknown') }}
+      ansible_facts.distribution_version: {{ ansible_facts['distribution_version'] | default('unknown') }}
+      ansible_os_installation_type: {{ ansible_facts['os_installation_type'] | default(ansible_os_installation_type | default('unknown')) }}
+  tags: [ packages ]
+
+# ---------------------------------------------------------------------------
+# Ensure .NET Framework 4.8+ on Windows prior to installing Chocolatey
+# ---------------------------------------------------------------------------
+
+# .NET 4.x detection:
+#  - HKLM\SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full
+#    DWORD 'Release' >= 528040 indicates .NET 4.8 on Server 2019/Windows 10
+#    (e.g., 528040 = 4.8; 528372/528449/528470+ are 4.8 updates)
+- name: Check .NET 4.x Release key
+  ansible.windows.win_reg_stat:
+    path: HKLM:\SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full
+    name: Release
+  register: dotnet_release
+
+# Only download/install when Release is missing or lower than 528040
+- name: Download .NET Framework 4.8 offline installer
+  ansible.windows.win_get_url:
+    url: https://download.microsoft.com/download/f/3/a/f3a6af84-da23-40a5-8d1c-49cc10c8e76f/NDP48-x86-x64-AllOS-ENU.exe
+    dest: C:\Windows\Temp\NDP48-x86-x64-AllOS-ENU.exe
+  when: not dotnet_release.exists or (dotnet_release.value | int) < 528040
+  tags: [ packages, dotnet ]
+
+- name: Install .NET Framework 4.8 (silent)
+  ansible.windows.win_package:
+    path: C:\Windows\Temp\NDP48-x86-x64-AllOS-ENU.exe
+    arguments: /quiet /norestart
+    product_id: '{DOTNET48-OFFLINE-INSTALLER}'
+    state: present
+  register: dotnet_install
+  when: not dotnet_release.exists or (dotnet_release.value | int) < 528040
+  tags: [ packages, dotnet ]
+
+- name: Reboot if .NET Framework 4.8 installation requires it
+  ansible.windows.win_reboot:
+    msg: "Rebooting to complete .NET Framework 4.8 installation"
+    reboot_timeout: 1800
+  when: dotnet_install.reboot_required | default(false)
+  tags: [ packages, dotnet ]
+
+# ---------------------------------------------------------------------------
+# Chocolatey Packages
+# ---------------------------------------------------------------------------
+
+- name: Ensure Chocolatey present (install if missing)
+  chocolatey.chocolatey.win_chocolatey:
+    name: chocolatey
+  tags: [ packages, chocolatey ]
 
 - name: Install Git
   chocolatey.chocolatey.win_chocolatey:
     name: git
     version: "2.53.0"
     state: present
+  tags: [ packages, chocolatey ]
 
 - name: Install PowerShell 7
   chocolatey.chocolatey.win_chocolatey:
     name: pwsh
     version: "7.5.4"
     state: present
+  tags: [ packages, chocolatey ]
