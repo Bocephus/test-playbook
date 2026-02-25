@@ -1,0 +1,67 @@
+---
+# -----------------------------------------------------------------------------
+# DEFOS | Features & Capabilities
+# - Remove legacy SMB1 (FS-SMB1)
+# - Install OpenSSH Client & Server (WindowsCapabilities)
+# - Install Telnet-Client (WindowsFeature)
+# - Reboot only if required
+# -----------------------------------------------------------------------------
+
+# --- Remove SMB1 (FS-SMB1) ---
+- name: Remove legacy SMB1 (FS-SMB1)
+  ansible.windows.win_feature:
+    name: FS-SMB1
+    state: absent
+    include_sub_features: no
+    restart: no
+  register: smb1_feature
+  tags: [features, smb1]
+
+# --- Install Telnet-Client (WindowsFeature) ---
+- name: Ensure Telnet-Client feature is installed
+  ansible.windows.win_feature:
+    name: Telnet-Client
+    state: present
+    include_sub_features: no
+    restart: no
+  register: telnet_feature
+  tags: [features, telnet]
+
+# --- Install OpenSSH Client capability ---
+- name: Ensure OpenSSH Client capability is installed
+  ansible.windows.win_dsc:
+    resource_name: WindowsCapability
+    Name: 'OpenSSH.Client~~~~0.0.1.0'
+    Ensure: present
+  register: openssh_client_cap
+  tags: [features, ssh, openssh]
+
+# --- Install OpenSSH Server capability ---
+- name: Ensure OpenSSH Server capability is installed
+  ansible.windows.win_dsc:
+    resource_name: WindowsCapability
+    Name: 'OpenSSH.Server~~~~0.0.1.0'
+    Ensure: present
+  register: openssh_server_cap
+  tags: [features, sshd, openssh]
+
+# --- Reboot if any of the above requested it (features may require restart) ---
+- name: Reboot if feature/capability changes require it
+  ansible.windows.win_reboot:
+    reboot_timeout: 1800
+    msg: "Rebooting to complete Windows feature/capability changes (SMB1/Telnet/OpenSSH)."
+  when: >
+    (smb1_feature.reboot_required     | default(false)) or
+    (telnet_feature.reboot_required   | default(false)) or
+    (openssh_client_cap.reboot_required | default(false)) or
+    (openssh_server_cap.reboot_required | default(false))
+  tags: [features, reboot]
+
+# --- OPTIONAL: Ensure sshd is set to auto and running (only when server cap installed) ---
+- name: Ensure sshd service is automatic and running (after OpenSSH Server install)
+  ansible.windows.win_service:
+    name: sshd
+    start_mode: auto
+    state: started
+  when: openssh_server_cap is changed or openssh_server_cap is succeeded
+  tags: [features, sshd, openssh]
