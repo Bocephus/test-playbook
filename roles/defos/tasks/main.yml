@@ -48,6 +48,9 @@
   import_tasks: firewall/create-rules.yml
   tags: [firewall, rdp, remoteadmin]
 
+- name: DEFOS | Features | Configure features and capabilities
+  import_tasks: 12-features.yml
+  tags: [features]
 
 - import_tasks: 99-report-changes.yml
   tags:
