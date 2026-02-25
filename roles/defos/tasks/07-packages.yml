@@ -71,3 +71,10 @@
     version: "7.5.4"
     state: present
   tags: [ packages, chocolatey ]
+
+- name: Install Nano
+  chocolatey.chocolatey.win_chocolatey:
+    name: nano
+    version: "7.2.36.20230412"
+    state: present
+  tags: [ packages, chocolatey ]
