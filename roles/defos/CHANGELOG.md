@@ -19,6 +19,7 @@ Format: https://keepachangelog.com/en/1.0.0/
 - Firewall rules for SSH
 - Added play to install/uninstall standard features
 - Added nano to the packages list
+
 ## [1.0.5] - 2026-02-24
 ### Updated
 - `roles/defos/tasks/07-packages.yml` to install .NET 4.8 on Server 2019 prior to installing chocolatey packages
