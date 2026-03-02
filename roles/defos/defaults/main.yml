@@ -1,5 +1,9 @@
 ---
 # defaults file for roles/defos
+defos_windows_connection: psrp
+defos_windows_auth: kerberos
+defos_windows_protocol: https
+defos_windows_cert_validation: ignore
 
 # Event Log settings
 event_log_name: 'Application'
