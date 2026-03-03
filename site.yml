@@ -1,6 +1,6 @@
 ---
 - name: Example Playbook
-  # hosts: windows
+  hosts: all
   gather_facts: false
   collections:
     - ansible.windows
