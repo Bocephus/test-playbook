@@ -1,12 +1,12 @@
 ---
 - name: Example Playbook
-  hosts: windows
+  # hosts: windows
   gather_facts: false
   collections:
     - ansible.windows
     - community.windows
     - chocolatey.chocolatey
-  vars_files:
-    - "{{ lookup('env','HOME') }}/ansible-secrets/windows/ansible_local_admin.yml"  # optional vault with secrets
+  # vars_files:
+  #   - "{{ lookup('env','HOME') }}/ansible-secrets/windows/ansible_local_admin.yml"  # optional vault with secrets
   roles:
     - defos
