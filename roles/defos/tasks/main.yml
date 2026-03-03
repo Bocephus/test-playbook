@@ -35,18 +35,18 @@
   tags:
     - services
 
-- name: DEFOS | Firewall | Skip if globally disabled
-  ansible.builtin.meta: end_task
-  when: not defos_enable_firewall_rules | bool
+- name: DEFOS | Firewall | Tasks
+  when: defos_enable_firewall_rules | bool
+  block:
+    - name: DEFOS | Firewall | Disable built-in rules (once)
+      import_tasks: firewall/disable-builtins.yml
+      when: defos_disable_builtin_rules | bool
+      tags: [firewall, builtin]
 
-- name: DEFOS | Firewall | Disable built-in rules (once)
-  import_tasks: firewall/disable-builtins.yml
-  when: defos_disable_builtin_rules | bool
-  tags: [firewall, builtin]
-
-- name: DEFOS | Firewall | Create managed rules (RDP + RemoteAdmin)
-  import_tasks: firewall/create-rules.yml
-  tags: [firewall, rdp, remoteadmin]
+    - name: DEFOS | Firewall | Create managed rules (RDP + RemoteAdmin)
+      import_tasks: firewall/create-rules.yml
+      when: defos_disable_builtin_rules | bool
+      tags: [firewall, rdp, remoteadmin]
 
 - name: DEFOS | Features | Configure features and capabilities
   import_tasks: 12-features.yml
