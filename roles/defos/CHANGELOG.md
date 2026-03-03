@@ -9,6 +9,9 @@ Format: https://keepachangelog.com/en/1.0.0/
 ### Added
 - N/A
 
+## [1.0.7] - 2026-03-03
+### Added
+- N/A
 ## [1.0.6] - 2026-02-25
 ### Added
 - PowerShell Module Logging
